@@ -670,11 +670,12 @@
     });
     if (!txs.length && !erros.length) erros.push('Nenhuma ordem marcada como executada.');
     if (erros.length) { ui.erroReg = 'Nada foi registrado. Corrija: ' + erros.join(' '); render(true); return; }
-    var feitos = [];
-    try { ignorarMudou = true; txs.forEach(function (tx) { INV.adicionarTx(tx); feitos.push(tx.ticker); }); }
+    var feitos = txs.map(function (tx) { return tx.ticker; });
+    // tudo ou nada: o store valida a lista inteira antes de gravar
+    try { ignorarMudou = true; INV.adicionarTxs(txs); }
     catch (er) {
       setTimeout(function () { ignorarMudou = false; }, 80);
-      ui.erroReg = 'Falha ao gravar' + (feitos.length ? ' (já registrados: ' + feitos.join(', ') + ')' : ' (nada foi registrado)') + ': ' + er.message;
+      ui.erroReg = 'Nada foi registrado: ' + er.message;
       render(true); return;
     }
     setTimeout(function () { ignorarMudou = false; }, 80);

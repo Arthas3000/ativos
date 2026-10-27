@@ -370,7 +370,7 @@
     var dispo = h('small', { class: 'pb-note' }, lim.ini && lim.fim ? 'Há dados dos ativos marcados de ' + fmtData(lim.ini) + ' a ' + fmtData(lim.fim) + '.' : 'Sem dados de preço para os ativos marcados.');
     var err = h('div', { class: 'inv-err', id: errId('periodo'), hidden: true });
     regErr('periodo', err, null);
-    elPeriodo.replaceChildren.apply(elPeriodo, [legenda].concat(radios, [extra, dispo, err]));
+    elPeriodo.replaceChildren.apply(elPeriodo, [legenda].concat(radios, [extra, dispo, err]).filter(Boolean));
   }
 
   /* ---------- validação e execução ---------- */
@@ -487,7 +487,7 @@
       tile('TWR (retorno da carteira)', pct(s.twr), s.twrAnual !== null && s.twrAnual !== undefined ? pctPlain(s.twrAnual) + ' ao ano' : 'anualizado só para períodos de 1 ano ou mais', sgn(s.twr)),
       tile('XIRR (retorno dos seus aportes)', s.xirr !== null && s.xirr !== undefined ? pctPlain(s.xirr) + ' a.a.' : '—', s.xirr === null || s.xirr === undefined ? 'não calculável neste caso' : 'considera as datas dos aportes', sgn(s.xirr)),
       tile('IPCA no período', s.ipcaAcum !== null && s.ipcaAcum !== undefined ? pct(s.ipcaAcum) : '—', s.ipcaAcum === null || s.ipcaAcum === undefined ? 'série de IPCA indisponível' : null),
-      tile('Retorno real (TWR − IPCA)', s.twrReal !== null && s.twrReal !== undefined ? pct(s.twrReal) : '—',
+      tile('Retorno real (TWR descontado o IPCA)', s.twrReal !== null && s.twrReal !== undefined ? pct(s.twrReal) : '—',
         s.valorFinalReal !== null && s.valorFinalReal !== undefined ? 'valor final em reais do início: ' + money(s.valorFinalReal) : null, sgn(s.twrReal)));
 
     var cardRes = h('div', { class: 'pb-card' },
