@@ -178,12 +178,26 @@
   }
 
   /* ---------- montagem ---------- */
-  var root = INV.aba({ id: 'simulacao', rotulo: 'Simulação' });
+  var root = INV.aba({ id: 'simulacao', rotulo: 'Simulador' });
   if (!root) return;
   root.classList.add('inv-sim');
   var top = h('div', { class: 'pb-page', style: 'display:grid;gap:var(--cds-gap-md)' });
   var res = h('div', { class: 'pb-page', style: 'display:grid;gap:var(--cds-gap-md)' });
-  root.append(top, res);
+  var resVazio = function () {
+    return h('div', { class: 'pb-card' }, h('h2', null, 'Nenhuma simulação ainda'),
+      h('p', { class: 'pb-text' }, 'Monte a carteira na etapa 1 (ativos, pesos, aportes e período) e toque em "Simular". O resultado aparece aqui.'),
+      h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: function () { secs.mostrar('montar'); } }, 'Montar carteira')));
+  };
+  res.append(resVazio());
+  var secs = INV.secoes(root, {
+    id: 'simulacao', rotulo: 'Etapas do simulador', inicial: 'montar',
+    itens: [
+      { id: 'montar', rotulo: 'Montar carteira', passo: '1', nodes: [top],
+        intro: 'Escolha os ativos e quanto cada um pesa, quanto investir no início e por mês, e o período do passado que quer testar.' },
+      { id: 'resultado', rotulo: 'Resultado', passo: '2', nodes: [res],
+        intro: 'Quanto você teria investido e quanto teria hoje, comparado com o Ibovespa e o CDI recebendo os mesmos aportes.' }
+    ]
+  });
 
   var elSoma, elPesos, elLista, elPeriodo, elStatus, btnSim, elEstEstrategia;
 
@@ -234,7 +248,7 @@
           h('label', { class: 'inv-sim-opt' }, h('input', { type: 'checkbox', id: 'sim-bcdi', checked: S.bcdi, onchange: function (e) { S.bcdi = e.target.checked; agendarSalvar(); } }), h('span', null, 'CDI'))),
         h('small', { class: 'pb-note' }, 'Os benchmarks recebem os mesmos aportes nas mesmas datas.')),
       h('div', { class: 'inv-actions' },
-        btnSim = h('button', { type: 'submit', class: 'pb-btn', id: 'sim-rodar' }, 'Simular'),
+        btnSim = h('button', { type: 'submit', class: 'pb-btn inv-pri', id: 'sim-rodar' }, 'Simular'),
         elStatus = h('span', { class: 'pb-note', id: 'sim-status', role: 'status', 'aria-live': 'polite' }))
     );
     top.replaceChildren(card);
@@ -447,12 +461,14 @@
       try {
         var r = CALC.simular(p);
         R = { r: r, notas: notas, estrategia: S.estrategia, tickers: S.sel.slice(), bench: { ibov: !!ibov, cdi: !!cdi } };
+        secs.mostrar('resultado');
         mostrar();
         elStatus.className = 'pb-note pos';
-        elStatus.textContent = 'Simulação concluída: valor final ' + money(r.resumo.valorFinal) + '.';
+        elStatus.textContent = 'Simulação concluída: valor final ' + money(r.resumo.valorFinal) + '. Veja a etapa 2.';
       } catch (err) {
         R = null;
-        res.replaceChildren(h('div', { class: 'pb-card' }, aviso('Não foi possível simular: ' + (err && err.message ? err.message : String(err)), 'bad')));
+        res.replaceChildren(h('div', { class: 'pb-card' }, aviso('Não foi possível simular: ' + (err && err.message ? err.message : String(err)), 'bad'),
+          h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { secs.mostrar('montar'); } }, 'Voltar e ajustar'))));
         elStatus.className = 'pb-note neg';
         elStatus.textContent = 'A simulação falhou.';
       } finally {
@@ -527,7 +543,8 @@
       (r.premissas && r.premissas.length) ? h('ul', { class: 'inv-sim-ul' }, r.premissas.map(function (p) { return h('li', null, p); })) : null,
       h('p', { class: 'pb-disc' }, 'Resultado histórico simulado. Não garante resultado futuro. Material educacional; não é recomendação de investimento.'));
 
-    res.replaceChildren(cardRes, cardGraf, cardAt, cardBm, cardPrem);
+    var voltar = h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { secs.mostrar('montar'); } }, 'Alterar a carteira'));
+    res.replaceChildren(cardRes, cardGraf, cardAt, cardBm, cardPrem, voltar);
     desenharGrafico();
   }
 

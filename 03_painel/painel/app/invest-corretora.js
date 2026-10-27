@@ -172,7 +172,7 @@
   const loteAtual = () => { const a = S.ticker ? INV.ativo(S.ticker) : null; return (a && a.lote > 0) ? Math.floor(a.lote) : 1; };
 
   /* ---------- montagem do DOM estático ---------- */
-  const sec = INV.aba({ id: ID, rotulo: 'Corretora' });
+  const sec = INV.aba({ id: ID, rotulo: 'Minha carteira' });
   if (!sec) return;
   injetarCss();
 
@@ -181,7 +181,7 @@
   R.avisosResumo = h('div', { 'aria-live': 'polite' });
   R.avisosArm = h('div', { class: 'inv-cor-armaz', 'aria-live': 'polite' });
   const cResumo = card('Resumo da carteira real',
-    h('p', { class: 'pb-note' }, 'Posições reais registradas por você, avaliadas pelo preço de referência (último fechamento disponível ou preço manual). Não é recomendação; material educacional.'),
+    h('p', { class: 'pb-note' }, 'Só o que você registrou, avaliado pelo último fechamento disponível (ou pelo preço manual de um ativo seu). Material educacional; não é recomendação.'),
     R.tiles, R.avisosResumo);
 
   /* 2. Posições */
@@ -205,7 +205,7 @@
     b.addEventListener('click', () => { S.tipo = t; marcarTipo(); sincronizar(); });
     R.tipoBtns[t] = b; tipoGrupo.appendChild(b);
   });
-  F.ativo = campo('cor-ativo', 'Ativo', { tipo: 'search', placeholder: 'Digite ticker ou nome', ajuda: 'Escolha um ativo da lista. Ativos próprios entram em "Meus ativos", mais abaixo.' });
+  F.ativo = campo('cor-ativo', 'Ativo', { tipo: 'search', placeholder: 'Digite ticker ou nome', ajuda: 'Escolha um ativo da lista. Para usar um ativo que não está nela, cadastre-o na seção "Meus ativos".' });
   R.datalist = h('datalist', { id: 'cor-ativo-lista' });
   F.ativo.input.setAttribute('list', 'cor-ativo-lista');
   R.info = h('div', { class: 'pb-kv' });
@@ -229,7 +229,7 @@
   R.confirma = h('input', { type: 'checkbox', id: 'cor-confirma' });
   R.erros = h('div', { class: 'inv-err', role: 'alert', id: 'cor-erros', hidden: true });
   R.ok = h('p', { class: 'pb-note pos', 'aria-live': 'polite' });
-  R.btnReg = h('button', { type: 'submit', class: 'pb-btn' }, 'Registrar');
+  R.btnReg = h('button', { type: 'submit', class: 'pb-btn inv-pri' }, 'Registrar operação');
   R.btnLimpar = h('button', { type: 'button', class: 'pb-btn' }, 'Limpar');
   R.btnRecalc = h('button', { type: 'button', class: 'pb-btn' }, 'Usar valores da estimativa');
   R.formReg = h('form', { class: 'inv-cor-sub', novalidate: true, 'aria-labelledby': 'cor-reg-t' },
@@ -244,7 +244,7 @@
     h('div', { class: 'inv-actions inv-cor-row' }, R.btnReg, R.btnLimpar),
     R.ok);
   const cTrade = card('Comprar ou vender um ativo',
-    h('p', { class: 'pb-note' }, 'Simule a quantidade pela estimativa e depois registre a operação que de fato foi executada na sua corretora. A estimativa não é uma ordem.'),
+    h('p', { class: 'pb-note' }, 'Em duas etapas: primeiro veja quanto dá para comprar (estimativa); depois, já com a ordem executada na sua corretora, registre o preço e a quantidade reais.'),
     tipoGrupo, F.ativo.wrap, R.datalist, R.info, R.posHint,
     h('div', { class: 'inv-cor-row' }, R.cotBox, R.btnCot, R.btnUsarCot),
     h('div', { class: 'inv-cor-grid' }, F.preco.wrap, F.valor.wrap),
@@ -267,7 +267,7 @@
   R.cxBanner = h('p', { class: 'inv-cor-banner', hidden: true, role: 'status' });
   R.cxMsg = h('p', { class: 'pb-note', 'aria-live': 'polite' });
   R.cxErro = h('div', { class: 'inv-err', role: 'alert', hidden: true });
-  R.cxBtn = h('button', { type: 'submit', class: 'pb-btn' }, 'Registrar');
+  R.cxBtn = h('button', { type: 'submit', class: 'pb-btn inv-pri' }, 'Registrar movimento');
   R.cxCancel = h('button', { type: 'button', class: 'pb-btn', hidden: true }, 'Cancelar correção');
   R.cxForm = h('form', { novalidate: true, class: 'inv-cor-sub', 'aria-label': 'Depósito ou retirada de caixa' },
     R.cxBanner, h('div', { class: 'inv-cor-grid' }, FC.tipo.wrap, FC.valor.wrap, FC.data.wrap, FC.obs.wrap),
@@ -297,14 +297,57 @@
   R.atForm = h('form', { novalidate: true, class: 'inv-cor-sub', 'aria-label': 'Adicionar ativo próprio' },
     h('h3', null, 'Adicionar ativo'),
     h('div', { class: 'inv-cor-grid' }, FA.ticker.wrap, FA.nome.wrap, FA.classe.wrap, FA.lote.wrap, FA.preco.wrap),
-    R.atErro, h('div', { class: 'inv-actions inv-cor-row' }, h('button', { type: 'submit', class: 'pb-btn' }, 'Adicionar ativo')), R.atMsg);
+    R.atErro, h('div', { class: 'inv-actions inv-cor-row' }, h('button', { type: 'submit', class: 'pb-btn inv-pri' }, 'Adicionar ativo')), R.atMsg);
   R.atLista = h('div');
   const cAtivos = card('Meus ativos',
-    h('p', { class: 'pb-note' }, 'Ativos que você cadastra (só em reais, B3). Eles entram na Corretora e no Assistente. Para entrar na Simulação, o ticker precisa estar na lista "extras" do arquivo de configuração, e o histórico chega na próxima atualização de dados.'),
-    h('div', { class: 'inv-cor-row' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => PB.show('config') }, 'Abrir Configurações')),
+    h('p', { class: 'pb-note' }, 'Ativos que você cadastra (só em reais, B3). Eles já podem ser comprados e entrar no planejamento de aporte. Para aparecerem no Simulador, o ticker precisa entrar na lista "extras" (veja em Ajustes) e o histórico chega na próxima atualização de dados.'),
+    h('div', { class: 'inv-cor-row' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir('config', 'extras') }, 'Abrir Ajustes › Ativos extras')),
     R.atLista, R.atForm);
 
-  [R.avisosArm, cResumo, cPos, cTrade, cAssist, cCaixa, cTx, cAtivos].forEach((c) => sec.appendChild(c));
+  /* 0. Primeiros passos e atalhos (no Resumo) */
+  R.passos = h('ol', { class: 'inv-passos' });
+  const cPassos = card('Primeiros passos',
+    h('p', { class: 'pb-note' }, 'Quatro passos para a carteira refletir o que você tem na corretora. Este quadro some quando tudo estiver feito.'),
+    R.passos);
+  const atalho = (rotulo, secao, pri) => h('button', { type: 'button', class: 'pb-btn' + (pri ? ' inv-pri' : ''), onclick: () => INV.ir(ID, secao) }, rotulo);
+  const cAtalhos = card('O que você quer fazer?',
+    h('div', { class: 'inv-atalhos' },
+      atalho('Registrar depósito', 'caixa'), atalho('Comprar ou vender', 'operar', true), atalho('Planejar aporte', 'aporte'),
+      atalho('Ver posições', 'posicoes'), atalho('Ver transações', 'transacoes')));
+  const PASSOS = [
+    ['caixa', 'Registre o dinheiro que está na corretora', 'Um depósito com o saldo atual da conta.', (st, ef) => ef.some((t) => t.tipo === 'deposito')],
+    ['operar', 'Registre o que você já tem', 'Uma compra para cada ativo, com preço e quantidade da nota.', (st, ef) => ef.some((t) => t.tipo === 'compra')],
+    ['posicoes', 'Defina o alvo de cada ativo', 'Quanto da carteira cada um deve ter (em %).', (st) => Object.keys(st.alvos || {}).length > 0],
+    ['aporte', 'Planeje o próximo aporte', 'O assistente divide o dinheiro novo entre os ativos abaixo do alvo.', (st, ef) => ef.some((t) => t.obs === 'Assistente de alocação')]
+  ];
+  function desenharPassos() {
+    let st, ef;
+    try { st = INV.estado(); ef = C.efetivas(st.transacoes || []); } catch (e) { return; }
+    const feitos = PASSOS.map((p) => !!p[3](st, ef));
+    cPassos.hidden = feitos.every(Boolean);
+    R.passos.replaceChildren(...PASSOS.map((p, i) => h('li', { class: feitos[i] ? 'ok' : '' },
+      h('span', { class: 'ck', 'aria-hidden': 'true' }, feitos[i] ? '✓' : String(i + 1)),
+      h('span', { class: 't' }, h('b', null, p[1]), h('span', null, p[2]), h('span', { class: 'inv-sr' }, feitos[i] ? ' (feito)' : ' (a fazer)')),
+      feitos[i] ? h('span') : h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, p[0]) }, 'Fazer agora'))));
+  }
+
+  INV.secoes(sec, {
+    id: ID, rotulo: 'Seções da carteira',
+    antes: [R.avisosArm],
+    itens: [
+      { id: 'resumo', rotulo: 'Resumo', nodes: [cResumo, cPassos, cAtalhos] },
+      { id: 'posicoes', rotulo: 'Posições', nodes: [cPos],
+        intro: 'Quanto você tem de cada ativo, quanto pagou e quanto vale hoje. Aqui você também define o alvo (%) de cada um.' },
+      { id: 'operar', rotulo: 'Comprar ou vender', nodes: [cTrade] },
+      { id: 'aporte', rotulo: 'Planejar aporte', nodes: [cAssist],
+        intro: 'Em cinco passos: escolha os ativos, diga quanto vai investir, veja a proposta, ajuste e registre o que comprou.' },
+      { id: 'caixa', rotulo: 'Caixa', nodes: [cCaixa] },
+      { id: 'transacoes', rotulo: 'Transações', nodes: [cTx] },
+      { id: 'ativos', rotulo: 'Meus ativos', nodes: [cAtivos] }
+    ]
+  });
+  INV.on('mudou', desenharPassos);
+  desenharPassos();
 
   function cor(i) { return (window.dash && window.dash.colors && window.dash.colors[i]) || ('var(--c' + i + ')'); }
 

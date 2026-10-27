@@ -39,22 +39,23 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 | `.github/workflows/atualizar.yml` | Atualização manual pelo botão "Atualizar dados" do app: preços, fundamentos, histórico longo, score, app e snapshot. |
 | `.github/workflows/testes.yml` | Testes a cada push e pull request: `node --test` (cálculos) e `atualizar.py teste` (pipeline). |
 | `03_painel/dados_longos/` | `serie_longa.json` (5 anos diários, com dividendos) e `indices.json` (CDI e IPCA), gerados por `atualizar.py historico`. Não entram no snapshot. |
-| `03_painel/painel/app/invest*.js` | Módulo de investimentos do app: `invest.js` (cálculos), `invest-store.js` (dados e Configurações), `invest-sim.js` (Simulação), `invest-corretora.js` (Corretora), `invest-assistente.js` (Assistente de alocação), `invest-tour.js` (Tutorial). |
+| `03_painel/painel/app/invest*.js` | Módulo de investimentos do app: `invest.js` (cálculos), `invest-store.js` (dados, seções e Ajustes), `invest-sim.js` (Simulador), `invest-corretora.js` (Minha carteira), `invest-nav.js` (áreas do app e estilo), `invest-assistente.js` (Assistente de alocação), `invest-tour.js` (tour "Como usar"). |
 | `03_painel/painel/app/tests/` | Testes dos cálculos (`node --test 03_painel/painel/app/tests/`). |
 
 ## Módulo de investimentos
 
-O app do GitHub Pages (não o painel do Claude) tem três abas extras depois das oito do painel:
+O app do GitHub Pages (não o painel do Claude) organiza tudo em quatro áreas: Mercado (as oito abas do painel) e mais três:
 
-- **Simulação:** carteira histórica com aportes mensais, dividendos e custos, comparada ao Ibovespa, ao CDI e ao IPCA (retorno nominal e real). É análise do passado: não garante resultado futuro.
-- **Corretora:** posições, caixa e transações registradas por você, mais o Assistente de alocação de aportes. Uma proposta nunca vira transação sem a sua confirmação, e o app não envia ordens.
-- **Configurações:** token de cotações, custos padrão, ativos extras, backup e fontes de dados.
+- **Simulador** (etapas Montar carteira › Resultado): carteira histórica com aportes mensais, dividendos e custos, comparada ao Ibovespa, ao CDI e ao IPCA (retorno nominal e real). É análise do passado: não garante resultado futuro.
+- **Minha carteira** (seções Resumo, Posições, Comprar ou vender, Planejar aporte, Caixa, Transações, Meus ativos): o que você registrou, com primeiros passos guiados e o Assistente de alocação de aportes. Uma proposta nunca vira transação sem a sua confirmação, e o app não envia ordens.
+- **Ajustes** (seções Cotações, Custos e lotes, Ativos extras, Backup, Fontes de dados).
+- **Navegação:** o app tem quatro áreas (Mercado, Minha carteira, Simulador, Ajustes), que viram uma barra no rodapé no celular. Cada área se divide em seções, e cada seção tem endereço próprio (ex.: `#corretora/caixa`). O botão **Como usar** abre o tour guiado.
 
 Pontos importantes:
 
-- **Dados só no aparelho.** Carteira, transações e ativos personalizados ficam no `localStorage` do navegador, sem servidor. Use Exportar/Importar em Configurações para fazer backup; limpar os dados do navegador apaga tudo.
-- **Token da brapi.** A cotação ao vivo usa o seu token de brapi.dev, colado em Configurações. Ele fica só neste navegador: não vai para o GitHub nem para o backup. Sem token, vale o último fechamento (marcado "atrasado") ou o preço digitado por você.
-- **Ativos extras no histórico.** Ativo personalizado só aparece na Simulação depois de entrar em `"extras": ["TICK1"]` no `03_painel/config.json`; o histórico dele chega na próxima execução de "Atualizar dados".
+- **Dados só no aparelho.** Carteira, transações e ativos personalizados ficam no `localStorage` do navegador, sem servidor. Use Exportar/Importar em Ajustes › Backup para fazer backup; limpar os dados do navegador apaga tudo.
+- **Token da brapi.** A cotação ao vivo usa o seu token de brapi.dev, colado em Ajustes › Cotações. Ele fica só neste navegador: não vai para o GitHub nem para o backup. Sem token, vale o último fechamento (marcado "atrasado") ou o preço digitado por você.
+- **Ativos extras no histórico.** Ativo personalizado só aparece no Simulador depois de entrar em `"extras": ["TICK1"]` no `03_painel/config.json`; o histórico dele chega na próxima execução de "Atualizar dados".
 - **Limitações.** Só ações e FIIs em reais na B3. Dividendos do Yahoo vêm brutos (sem IR, JCP incluído). Simulação usa preço de fechamento, sem imposto nem come-cotas. Material educacional, não é recomendação.
 
 ## Próximas etapas (planejadas)

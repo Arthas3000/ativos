@@ -84,6 +84,7 @@
     var lista = Array.isArray(passo.sel) ? passo.sel : [passo.sel];
     for (var i = 0; i < lista.length; i++) {
       var el = ajustarAlvo(resolverUm(lista[i], passo.aba));
+      if (el && window.INV && typeof window.INV.revelar === 'function') { try { window.INV.revelar(el); } catch (e) { /* ok */ } }
       if (visivel(el)) return { el: el, i: i };
     }
     return null;
@@ -95,9 +96,9 @@
   /* ------------------------------------------------------------------ roteiro */
   // cada passo: {cap, aba, sel, titulo, texto (string ou função), ausente (nota quando o bloco não está na tela)}
   var C_INI = 'Início', C_BAR = 'Barra e cabeçalho', C_GER = 'Visão geral', C_RAN = 'Ranking', C_VAL = 'Valor × queda',
-    C_PRE = 'Preços', C_ATI = 'Ativo', C_MAC = 'Macro', C_HIS = 'Histórico', C_MET = 'Método', C_SIM = 'Simulação',
-    C_COR = 'Corretora', C_ASS = 'Corretora: Assistente de alocação', C_CX = 'Corretora: caixa, transações e ativos',
-    C_CFG = 'Configurações', C_FIM = 'Encerramento';
+    C_PRE = 'Preços', C_ATI = 'Ficha do ativo', C_MAC = 'Cenário macro', C_HIS = 'Histórico do score', C_MET = 'Como o score funciona',
+    C_SIM = 'Simulador', C_COR = 'Minha carteira', C_ASS = 'Minha carteira: planejar aporte', C_CX = 'Minha carteira: caixa, transações e ativos',
+    C_CFG = 'Ajustes', C_FIM = 'Encerramento';
 
   function roteiro() {
     var p = [];
@@ -114,7 +115,9 @@
 
     /* ---- barra e cabeçalho ---- */
     s(C_BAR, 'geral', '.app-bar', 'Barra do app',
-      'A barra fica fixa no topo enquanto você rola. Ela traz o status dos dados, o botão Tutorial (este tour) e o botão Atualizar dados.');
+      'A barra fica fixa no topo enquanto você rola. À esquerda, o nome do app e a data dos preços; no meio, as quatro áreas do app; à direita, “Como usar” (este tour) e “Atualizar dados”.');
+    s(C_BAR, 'geral', '.inv-grupos', 'As quatro áreas do app',
+      'Mercado: a análise dos 20 ativos (score, preços, valor justo, cenário). Minha carteira: o que você tem de verdade e o planejamento de aportes. Simulador: como uma carteira teria se saído no passado. Ajustes: cotações, custos, backup e fontes. No celular, essas áreas ficam numa barra no rodapé da tela.');
     s(C_BAR, 'geral', '#app-status', 'Versão e data dos preços',
       'Mostra “Versão vN · preços de DD/MM/AAAA”, lido de parametros.json: a versão da análise e o dia do último fechamento usado no score. Se os dados não puderem ser lidos e não houver cópia salva, aparece “Sem conexão e sem cópia salva dos dados”.');
     s(C_BAR, 'geral', '#app-update', 'Atualizar dados',
@@ -129,12 +132,12 @@
         return 'Repete a versão e a data dos preços e informa o evento de estresse da análise' + (x && x.evento ? ' (nesta versão: ' + x.evento + ')' : '') +
           '. É a partir dele que o painel mede a queda: o “estresse” compara o fechamento do último pregão antes do evento com o do pregão do evento.';
       });
-    s(C_BAR, 'geral', 'nav.pb-tabs', 'Abas',
-      'As oito primeiras abas (Visão geral a Método) mostram a análise do score. Simulação, Corretora e Configurações são do app e usam dados que ficam só neste aparelho. A aba aberta vai para o endereço (#nome), então você pode guardar o link de uma aba.');
+    s(C_BAR, 'geral', 'nav.pb-tabs', 'Seções do Mercado',
+      'Dentro de Mercado, cada assunto tem a sua seção: Visão geral, Ranking, Valor × queda, Preços, Ficha do ativo, Cenário macro, Histórico do score e Como o score funciona. Logo abaixo, uma frase diz o que a seção aberta mostra. No celular, deslize a fileira para o lado. As outras áreas também têm seções, no mesmo formato. A seção aberta vai para o endereço, então dá para guardar o link.');
 
     /* ---- visão geral ---- */
     s(C_GER, 'geral', '#geral .pb-tiles', 'Indicadores de mercado',
-      'Cinco cartões do snapshot de mercado (macro.json): Ibovespa no estresse, DI jan/31 (com o ajuste anterior), Selic meta (com a projeção Focus para o fim de 2026), dólar comercial e IPCA 2026 (Focus). Fonte e grau de confiança de cada um estão na aba Macro; no dólar, o cartão avisa que as fontes divergem.');
+      'Cinco cartões do snapshot de mercado (macro.json): Ibovespa no estresse, DI jan/31 (com o ajuste anterior), Selic meta (com a projeção Focus para o fim de 2026), dólar comercial e IPCA 2026 (Focus). Fonte e grau de confiança de cada um estão na seção Cenário macro; no dólar, o cartão avisa que as fontes divergem.');
     s(C_GER, 'geral', '#sinais-card', 'Como os ativos se dividem',
       'Chips com a classificação qualitativa de cada ativo (sinal): Oportunidade, Oportunidade com risco, Qualidade sem margem, Neutro, Risco no rendimento e Armadilha. Cada chip mostra a contagem e os tickers. O sinal vem das notas da análise e é separado do score.');
     s(C_GER, 'geral', '#top3', 'Os três primeiros do score',
@@ -148,7 +151,7 @@
     s(C_RAN, 'ranking', '#tabela', 'Tabela completa',
       'Uma linha por ativo, na ordem do ranking. Clique no cabeçalho de uma coluna para ordenar (de novo para inverter) e numa linha para abrir o ativo. Em telas estreitas algumas colunas ficam escondidas.');
     s(C_RAN, 'ranking', ['#tabela th[data-field="score"]', '#tabela'], 'Score e posição',
-      'O score vai de 0 a 1000 e a barra ao lado usa a cor do sinal. A posição (#) é a ordem pelo score. Scores próximos não são diferença real de qualidade: veja a robustez na aba Histórico.');
+      'O score vai de 0 a 1000 e a barra ao lado usa a cor do sinal. A posição (#) é a ordem pelo score. Scores próximos não são diferença real de qualidade: veja a robustez em Histórico do score.');
     s(C_RAN, 'ranking', ['#tabela th[data-field="p1"]', '#tabela'], 'Colunas P1 a P4',
       'Pontos de cada pilar: P1 desconto (máximo 300), P2 solidez (250), P3 qualidade (250) e P4 proventos (200). A soma dos quatro é o score. Dado ausente não vale zero: o peso dele é redistribuído dentro do pilar.');
     s(C_RAN, 'ranking', ['#tabela th[data-field="confianca"]', '#tabela'], 'Confiança',
@@ -162,7 +165,7 @@
     s(C_RAN, 'ranking', ['#tabela th[data-field="dy"]', '#tabela'], 'DY e P/VP',
       'DY % é o dividend yield dos últimos 12 meses: nas ações vem do Fundamentus (ajustado quando há provento extraordinário identificado) e nos FIIs é calculado dos rendimentos sobre o preço. P/VP é o preço dividido pelo valor patrimonial por ação ou cota. Yield alto pode refletir queda de preço ou distribuição que não se repete.');
     s(C_RAN, 'ranking', ['#tabela th[data-field="ms"]', '#tabela'], 'MS e valor justo',
-      'MS % é a margem de segurança: P/VP justo ÷ P/VP atual − 1, só para ações. Positiva significa preço abaixo do valor justo do modelo. Justo R$ é esse valor por ação. Os dois dependem das premissas de Ke e g (aba Método).');
+      'MS % é a margem de segurança: P/VP justo ÷ P/VP atual − 1, só para ações. Positiva significa preço abaixo do valor justo do modelo. Justo R$ é esse valor por ação. Os dois dependem das premissas de Ke e g (seção Como o score funciona).');
     s(C_RAN, 'ranking', ['#tabela th[data-field="vol_ratio"]', '#tabela'], 'Volume ÷ média',
       'Volume negociado no dia do estresse dividido pela média dos até 20 pregões anteriores. Valores bem acima de 1x indicam dia de negociação fora do comum; é um sinal de atenção, não de compra.');
 
@@ -183,7 +186,7 @@
 
     /* ---- preços ---- */
     s(C_PRE, 'precos', '#multiples', 'Pequenos múltiplos em base 100',
-      'Um quadro por ativo, na ordem do ranking, todos na mesma escala vertical. O preço é convertido para base 100 no fechamento de 1 mês antes da data de referência (a data aparece no texto da aba). A linha cinza é o Ibovespa; o tracejado vertical marca o dia do estresse. O título de cada quadro traz a posição, o ticker e a variação em 1 mês. Passe o mouse para ver data, fechamento e Ibovespa; clique para abrir o ativo.');
+      'Um quadro por ativo, na ordem do ranking, todos na mesma escala vertical. O preço é convertido para base 100 no fechamento de 1 mês antes da data de referência (a data aparece no título da seção). A linha cinza é o Ibovespa; o tracejado vertical marca o dia do estresse. O título de cada quadro traz a posição, o ticker e a variação em 1 mês. Passe o mouse para ver data, fechamento e Ibovespa; clique para abrir o ativo.');
 
     /* ---- ativo ---- */
     s(C_ATI, 'ativo', '#ativo .pb-controls', 'Escolher o ativo',
@@ -240,7 +243,7 @@
     s(C_SIM, 'simulacao', '#simulacao form', 'Simulação histórica de carteira',
       'Mostra o que teria acontecido com aportes numa carteira escolhida, usando preços e dividendos reais do passado (histórico de 5 anos baixado pelo GitHub Actions). É uma análise do passado: resultado histórico simulado não garante resultado futuro.', SEM_FORM);
     s(C_SIM, 'simulacao', '#sim-busca', 'Ativos da carteira',
-      'Busque e marque os ativos que entram na simulação. Só aparecem ativos com histórico longo, e cada um mostra o intervalo de datas disponível. Ativos personalizados só têm histórico depois de entrar na lista “extras” do config.json (veja Configurações).', SEM_FORM);
+      'Busque e marque os ativos que entram na simulação. Só aparecem ativos com histórico longo, e cada um mostra o intervalo de datas disponível. Ativos personalizados só têm histórico depois de entrar na lista “extras” do config.json (veja Ajustes › Ativos extras).', SEM_FORM);
     s(C_SIM, 'simulacao', 'leg:Pesos da carteira', 'Pesos da carteira',
       'Defina o percentual de cada ativo marcado; a soma precisa ser 100%. O botão “Pesos iguais” divide por igual e o texto ao lado mostra a soma atual.', SEM_FORM);
     s(C_SIM, 'simulacao', pai('#sim-ini', '.inv-sim-grid'), 'Aportes e dia do aporte',
@@ -288,7 +291,7 @@
     s(C_COR, 'corretora', '#cor-preco', 'Preço',
       'Vem preenchido pela cotação, mas você pode digitar. Ao digitar, o preço vira “manual”, nenhuma atualização o sobrescreve e aparece o botão “Usar cotação” para voltar ao automático.');
     s(C_COR, 'corretora', '#cor-valor', 'Valor a investir (ou a vender)',
-      'Quanto você quer aplicar. A partir dele o app calcula a quantidade estimada respeitando o lote do ativo (1 = fracionário, 100 = lote padrão) e as taxas da aba Configurações. Na venda, a quantidade não passa do que você tem registrado.');
+      'Quanto você quer aplicar. A partir dele o app calcula a quantidade estimada respeitando o lote do ativo (1 = fracionário, 100 = lote padrão) e as taxas definidas em Ajustes › Custos e lotes. Na venda, a quantidade não passa do que você tem registrado.');
     s(C_COR, 'corretora', 'apos:Estimativa', 'Estimativa',
       'Quantidade, valor bruto, taxas, total e sobra do valor. É uma estimativa com o preço da tela, não um valor que será cobrado: o preço real de execução pode ser outro.');
     s(C_COR, 'corretora', 'form[aria-labelledby="cor-reg-t"]', 'Registrar operação executada',
@@ -316,19 +319,19 @@
     s(C_CX, 'corretora', 'card:Transações', 'Transações',
       'Lista as transações efetivas: data, tipo, ticker, quantidade, preço, taxas, total, fonte do preço, observação e ações. “Corrigir” cria uma transação nova que substitui a anterior; “Cancelar” pede um motivo e cria um cancelamento. O original nunca é apagado, e a opção “Mostrar correções e cancelamentos” exibe o histórico completo. Antes da primeira transação, o card mostra “Nenhuma transação registrada”.');
     s(C_CX, 'corretora', 'card:Meus ativos', 'Meus ativos',
-      'Cadastre ativos que não estão nos 20 do painel: ticker no formato B3 (4 letras e 1 ou 2 dígitos), nome, classe, lote e preço manual opcional. Só vale para reais e B3. Eles entram na Corretora e no Assistente; para entrar na Simulação, o ticker precisa estar na lista “extras” do config.json. Não é possível remover um ativo que tenha posição ou transação.');
+      'Cadastre ativos que não estão nos 20 do painel: ticker no formato B3 (4 letras e 1 ou 2 dígitos), nome, classe, lote e preço manual opcional. Só vale para reais e B3. Eles podem ser comprados e entram no planejamento de aporte; para entrar no Simulador, o ticker precisa estar na lista “extras” do config.json. Não é possível remover um ativo que tenha posição ou transação.');
 
     /* ---- configurações ---- */
-    s(C_CFG, 'config', 'card:Configurações', 'Configurações',
-      'Reúne cotações, custos, ativos extras, backup e fontes de dados. Se o navegador não permitir gravar dados locais, um aviso diz que tudo se perde ao fechar a página. Material educacional; seus dados ficam apenas neste aparelho.');
+    s(C_CFG, 'config', '#config .inv-sub', 'Ajustes',
+      'Cinco seções: Cotações, Custos e lotes, Ativos extras, Backup e Fontes de dados. Se o navegador não permitir gravar dados locais, um aviso no topo diz que tudo se perde ao fechar a página. Seus dados ficam apenas neste aparelho.');
     s(C_CFG, 'config', 'card:Cotações', 'Cotações (brapi.dev)',
       'Sem token, o app usa o último fechamento salvo pelo GitHub Actions, marcado como “atrasado”. Para ver o preço do dia, crie uma conta gratuita em brapi.dev, copie o seu token na área de tokens/API e cole abaixo. O atraso e os limites das cotações dependem do seu plano na brapi; consulte o site deles.');
     s(C_CFG, 'config', '#inv-cfg-token', 'Token da brapi',
       'Campo de senha com botão para mostrar ou ocultar. “Salvar e testar” grava e consulta PETR4 para checar se o token funciona; “Apagar token” remove. O token fica só neste navegador (localStorage): não vai para o GitHub nem para o backup.');
     s(C_CFG, 'config', 'card:Custos padrão', 'Custos padrão',
-      'Corretagem fixa por ordem (R$), emolumentos e taxas (%), lote padrão dos 20 ativos (1 = fracionário, 100 = lote padrão) e intensidade padrão do score. São pontos de partida para a Corretora e o Assistente, e você pode ajustar em cada operação. Valores inválidos são recusados com mensagem.');
+      'Corretagem fixa por ordem (R$), emolumentos e taxas (%), lote padrão dos 20 ativos (1 = fracionário, 100 = lote padrão) e intensidade padrão do score. São pontos de partida para as compras e o planejamento de aporte, e você pode ajustar em cada operação. Valores inválidos são recusados com mensagem.');
     s(C_CFG, 'config', 'card:Ativos extras', 'Ativos extras no histórico',
-      'Lista seus ativos personalizados e se já têm série longa. Para a Simulação enxergá-los, o ticker precisa entrar no config.json; o app mostra o trecho “extras” pronto para copiar e o link de edição no GitHub. O histórico chega na próxima execução de “Atualizar dados”.');
+      'Lista seus ativos personalizados e se já têm série longa. Para o Simulador enxergá-los, o ticker precisa entrar no config.json; o app mostra o trecho “extras” pronto para copiar e o link de edição no GitHub. O histórico chega na próxima execução de “Atualizar dados”.');
     s(C_CFG, 'config', 'card:Backup', 'Backup',
       'Exportar baixa um arquivo .json com carteira, transações, alvos e ativos próprios, sem o token. Importar substitui todos os dados do aparelho e antes pede confirmação com o botão “Substituir dados”. Apagar tudo exige digitar APAGAR. Limpar os dados do navegador, trocar de aparelho ou desinstalar o app apaga a carteira: exporte com frequência.');
     s(C_CFG, 'config', 'card:Fontes de dados', 'Fontes de dados',
@@ -341,9 +344,9 @@
   }
 
   /* ------------------------------------------------------------------ interface */
-  var botao = h('button', { type: 'button', class: 'app-btn', id: 'app-tour', 'aria-haspopup': 'dialog' }, 'Tutorial');
+  var botao = h('button', { type: 'button', class: 'app-btn', id: 'app-tour', 'aria-haspopup': 'dialog', title: 'Tour guiado por todas as telas do app' }, 'Como usar');
   var atualizar = document.getElementById('app-update');
-  if (atualizar && atualizar.parentNode === barra) barra.insertBefore(botao, atualizar); else barra.appendChild(botao);
+  if (atualizar && atualizar.parentNode) atualizar.parentNode.insertBefore(botao, atualizar); else barra.appendChild(botao);
 
   var raiz, spot, card, elCap, elNum, elTitulo, elTexto, elNota, elStatus, selCap, bVoltar, bAvancar, bFechar;
   var passos = [], idx = 0, aberto = false, origem = null, scrollOrigem = 0, seq = 0, pendente = 0;

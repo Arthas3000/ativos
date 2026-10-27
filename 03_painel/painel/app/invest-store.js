@@ -809,21 +809,26 @@
   // ---------------------------------------------------------------- abas
   const abas = {};
   let timerHash = null, hashAplicado = false;
+  // endereço: #pagina ou #pagina/secao (ex.: #corretora/caixa)
+  const lerHash = () => { const [pg, sc] = (location.hash || '').replace(/^#/, '').split('/'); return { pg, sc }; };
+  function irHash(pg, sc) {
+    if (!abas[pg]) return false;
+    if (W.PB.current !== pg) W.PB.show(pg);
+    if (sc && secoesReg[pg]) secoesReg[pg].mostrar(sc);
+    return true;
+  }
   function verHash() {
     timerHash = null;
-    const h = (location.hash || '').replace(/^#/, '');
-    if (!h || !abas[h] || hashAplicado) return;
+    const { pg, sc } = lerHash();
+    if (!pg || !abas[pg] || hashAplicado) return;
     hashAplicado = true;
-    if (W.PB.current !== h) W.PB.show(h);
+    irHash(pg, sc);
   }
   function agendarHash() {
     if (timerHash !== null) clearTimeout(timerHash);
     timerHash = setTimeout(verHash, 0);
   }
-  W.addEventListener('hashchange', () => {
-    const h = (location.hash || '').replace(/^#/, '');
-    if (abas[h] && W.PB.current !== h) W.PB.show(h);
-  });
+  W.addEventListener('hashchange', () => { const { pg, sc } = lerHash(); irHash(pg, sc); });
   function aba(o) {
     if (!o || !o.id) throw new Error('aba: informe {id, rotulo}.');
     if (abas[o.id]) return abas[o.id];
@@ -846,6 +851,76 @@
     agendarHash();
     return sec;
   }
+  // ---------------------------------------------------------------- seções dentro de uma aba
+  // Cada seção vive no seu próprio painel; uma barra de subabas troca entre elas (a escolha fica lembrada).
+  const secoesReg = {};
+  const UIKEY = 'pb-ui-v1';
+  const lerUi = () => { try { return JSON.parse(W.localStorage.getItem(UIKEY)) || {}; } catch (e) { return {}; } };
+  const gravarUi = (fn) => { try { const u = lerUi(); fn(u); W.localStorage.setItem(UIKEY, JSON.stringify(u)); } catch (e) { /* preferência: sem armazenamento, só não lembra */ } };
+  function secoes(sec, o) {
+    const pg = o.id, itens = o.itens.filter(Boolean);
+    const nav = el('div', { class: 'inv-sub', role: 'tablist', 'aria-label': o.rotulo || 'Seções' });
+    const bts = {}, pns = {};
+    itens.forEach((it) => {
+      const bid = 'inv-sub-' + pg + '-' + it.id, pid = 'inv-sec-' + pg + '-' + it.id;
+      const b = el('button', { type: 'button', role: 'tab', class: 'inv-sub-tab', id: bid, 'aria-controls': pid, 'aria-selected': 'false', tabindex: '-1' },
+        it.passo ? el('span', { class: 'inv-sub-n', 'aria-hidden': 'true' }, it.passo) : null, it.rotulo);
+      b.addEventListener('click', () => mostrar(it.id));
+      const intro = it.intro ? el('p', { class: 'inv-sec-intro' }, it.intro) : null;
+      const pn = el('div', { class: 'inv-secao', id: pid, role: 'tabpanel', 'aria-labelledby': bid, 'data-secao': it.id, hidden: true }, intro, ...(it.nodes || []));
+      nav.appendChild(b); bts[it.id] = b; pns[it.id] = pn;
+    });
+    nav.addEventListener('keydown', (ev) => {
+      const ids = itens.map((i) => i.id), k = ids.indexOf(atual);
+      const alvo = ev.key === 'ArrowRight' ? ids[(k + 1) % ids.length] : ev.key === 'ArrowLeft' ? ids[(k - 1 + ids.length) % ids.length]
+        : ev.key === 'Home' ? ids[0] : ev.key === 'End' ? ids[ids.length - 1] : null;
+      if (!alvo) return;
+      ev.preventDefault(); mostrar(alvo); bts[alvo].focus();
+    });
+    let atual = null;
+    function mostrar(id, opts) {
+      if (!pns[id]) return;
+      const mudou = atual !== id;
+      atual = id;
+      itens.forEach((it) => {
+        const ativo = it.id === id;
+        pns[it.id].hidden = !ativo;
+        bts[it.id].setAttribute('aria-selected', String(ativo));
+        bts[it.id].tabIndex = ativo ? 0 : -1;
+      });
+      if (bts[id].scrollIntoView && nav.scrollWidth > nav.clientWidth) bts[id].scrollIntoView({ block: 'nearest', inline: 'center' });
+      gravarUi((u) => { (u.secoes = u.secoes || {})[pg] = id; });
+      if (W.PB.current === pg) { try { history.replaceState(null, '', '#' + pg + '/' + id); } catch (e) { /* ok */ } }
+      if (mudou && !(opts && opts.silencioso)) {
+        emit('secao', { pagina: pg, secao: id });
+        try { W.PB.redraw(); } catch (e) { console.error(e); }
+        // a troca não deve deixar o leitor no meio da página anterior
+        const topo = nav.getBoundingClientRect().top;
+        if (topo < 0) W.scrollBy({ top: topo - 80, behavior: 'auto' });
+      }
+    }
+    if (o.antes) o.antes.filter(Boolean).forEach((n) => sec.appendChild(n));
+    sec.appendChild(nav);
+    itens.forEach((it) => sec.appendChild(pns[it.id]));
+    const ctl = { mostrar, atual: () => atual, botao: (id) => bts[id], painel: (id) => pns[id] };
+    secoesReg[pg] = ctl;
+    const { pg: hp, sc } = lerHash();
+    const salvo = (lerUi().secoes || {})[pg];
+    mostrar(hp === pg && pns[sc] ? sc : pns[salvo] ? salvo : (o.inicial || itens[0].id), { silencioso: true });
+    return ctl;
+  }
+  // mostra a seção que contém o elemento (usado pelo tutorial e por links internos)
+  function revelar(n) {
+    const pn = n && n.closest ? n.closest('.inv-secao') : null;
+    if (!pn) return;
+    const pg = pn.closest('[data-page]');
+    const ctl = pg && secoesReg[pg.dataset.page];
+    if (ctl && pn.hidden) ctl.mostrar(pn.dataset.secao, { silencioso: true });
+    if (ctl) try { W.PB.redraw(); } catch (e) { /* ok */ }
+  }
+  // vai para uma aba e, se houver, para uma seção dela
+  function ir(pg, sc) { if (abas[pg]) W.PB.show(pg); if (sc && secoesReg[pg]) secoesReg[pg].mostrar(sc); }
+
   function aoMostrar(id, fn) {
     const roda = () => {
       if (W.PB.current !== id) return;
@@ -860,7 +935,7 @@
     estado: () => clone(estado), salvar, on, exportar, importar, apagarTudo,
     adicionarTx, adicionarTxs, corrigirTx, cancelarTx, ativoCustom, definirAlvo,
     carregar, serie, indices, universo, ativo, cotacao,
-    precoReferencia: (t) => precoRef(t, ''), token, aba, aoMostrar,
+    precoReferencia: (t) => precoRef(t, ''), token, aba, aoMostrar, secoes, revelar, ir, preferencias: { ler: lerUi, gravar: gravarUi },
     armazenamento: () => ({ persistente: !memOnly, corrompido, copiaCorrompida: copiaCorrompida() !== null }),
     copiaCorrompida, baixarCopiaCorrompida, descartarCopiaCorrompida,
     ui: { el, campo, aviso, estadoPreco, tabela, parseNumero, fmtData, fmtDataHora, seletorAtivo, agoraLocal, hoje, avisosArmazenamento }
@@ -872,7 +947,7 @@
   const { aviso: av } = INV.ui;
 
   function montarConfig() {
-    const sec = aba({ id: 'config', rotulo: 'Configurações' });
+    const sec = aba({ id: 'config', rotulo: 'Ajustes' });
     if (!sec) return;
     const status = (host, ...filhos) => { host.replaceChildren(...filhos.filter(Boolean)); };
     const card = (titulo, ...filhos) => el('div', { class: 'pb-card' }, el('h2', null, titulo), filhos);
@@ -891,7 +966,7 @@
         campoToken.input.type = mostrando ? 'password' : 'text';
         btnVer.setAttribute('aria-pressed', String(!mostrando));
       } }, 'Mostrar token');
-    const btnSalvarTk = el('button', { type: 'button', class: 'pb-btn', onclick: salvarETestar }, 'Salvar e testar');
+    const btnSalvarTk = el('button', { type: 'button', class: 'pb-btn inv-pri', onclick: salvarETestar }, 'Salvar e testar');
     const btnApagarTk = el('button', { type: 'button', class: 'pb-btn', onclick: () => {
       token.apagar(); campoToken.input.value = ''; campoToken.setErro(null);
       status(stToken, av('Token apagado deste navegador. Sem token, o app usa o último fechamento (atrasado).', 'info'));
@@ -969,7 +1044,7 @@
     const cardCustos = card('Custos padrão',
       el('p', { class: 'pb-note' }, 'Valores usados como ponto de partida na Corretora e no Assistente. Você pode ajustá-los em cada operação.'),
       el('div', { class: 'inv-form' }, cf.taxaFixa, cf.taxaPct, cf.lote, cf.intens),
-      el('div', { class: 'inv-actions' }, el('button', { type: 'button', class: 'pb-btn', onclick: salvarCustos }, 'Salvar custos')),
+      el('div', { class: 'inv-actions' }, el('button', { type: 'button', class: 'pb-btn inv-pri', onclick: salvarCustos }, 'Salvar custos')),
       stCustos);
 
     // ---- 3) Ativos extras no histórico
@@ -1066,7 +1141,7 @@
     const stApagar = el('div', { 'aria-live': 'polite' });
     const cardBackup = card('Backup',
       av('Seus dados ficam só neste navegador. Limpar os dados do navegador, trocar de aparelho ou desinstalar o app apaga a carteira. Exporte um backup com frequência.', 'warn'),
-      el('div', { class: 'inv-actions' }, el('button', { type: 'button', class: 'pb-btn', onclick: exportarArquivo }, 'Exportar backup')),
+      el('div', { class: 'inv-actions' }, el('button', { type: 'button', class: 'pb-btn inv-pri', onclick: exportarArquivo }, 'Exportar backup')),
       stBackup,
       el('hr', { class: 'inv-card-sep' }),
       campoArq, stImport, confirma,
@@ -1118,12 +1193,23 @@
     const cardFontes = card('Fontes de dados', corpoFontes);
 
     // ---- montagem
-    sec.replaceChildren(
-      el('div', { class: 'pb-card' },
-        el('h2', null, 'Configurações'),
-        el('p', { class: 'pb-note' }, 'Material educacional; não é recomendação de investimento. Seus dados ficam apenas neste aparelho.'),
-        avisoArm),
-      cardCot, cardCustos, cardExtras, cardBackup, cardFontes);
+    sec.replaceChildren();
+    secoes(sec, {
+      id: 'config', rotulo: 'Seções dos ajustes',
+      antes: [avisoArm],
+      itens: [
+        { id: 'cotacoes', rotulo: 'Cotações', nodes: [cardCot],
+          intro: 'Opcional. Sem token, o app usa o último fechamento baixado pelo GitHub Actions e avisa que não é cotação ao vivo.' },
+        { id: 'custos', rotulo: 'Custos e lotes', nodes: [cardCustos],
+          intro: 'Valores padrão usados nas estimativas de compra e no planejamento de aportes. Você ainda pode editar cada operação.' },
+        { id: 'extras', rotulo: 'Ativos extras', nodes: [cardExtras],
+          intro: 'Para um ativo seu ter histórico no Simulador, ele precisa entrar na lista "extras" do repositório.' },
+        { id: 'backup', rotulo: 'Backup', nodes: [cardBackup],
+          intro: 'Seus registros ficam só neste navegador. Exporte uma cópia de vez em quando.' },
+        { id: 'fontes', rotulo: 'Fontes de dados', nodes: [cardFontes],
+          intro: 'De onde vêm os números e quando foram atualizados pela última vez.' }
+      ]
+    });
 
     statusTokenInicial();
     preencherCustos();

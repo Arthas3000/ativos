@@ -57,8 +57,8 @@
 </head>
 <body>
 <div class="app-bar">
-  <small id="app-status">Carregando dados…</small>
-  <a class="app-btn" id="app-update" href="{{ACTIONS_URL}}" target="_blank" rel="noopener">Atualizar dados</a>
+  <div class="app-brand"><b>Painel B3</b><small id="app-status">Carregando dados…</small></div>
+  <div class="app-actions"><a class="app-btn" id="app-update" href="{{ACTIONS_URL}}" target="_blank" rel="noopener">Atualizar dados</a></div>
 </div>
 <div id="dash-root">
 <!--PAINEL-->
@@ -110,6 +110,7 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catc
 <script src="invest-sim.js"></script>
 <script src="invest-corretora.js"></script>
 <script src="invest-assistente.js"></script>
+<script src="invest-nav.js"></script>
 <script src="invest-tour.js"></script>
 </body>
 </html>

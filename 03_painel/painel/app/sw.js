@@ -1,8 +1,8 @@
 // Cache do app. Tudo da mesma origem (HTML, JS, JSON, manifest) tenta a rede primeiro e só usa a cópia salva se estiver offline,
 // para que correções cheguem a quem já instalou e o HTML novo nunca rode com JS velho. Cache primeiro só para o d3 da CDN e os ícones.
-const CACHE = 'painel-b3-v3';
+const CACHE = 'painel-b3-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
-  'invest.js', 'invest-store.js', 'invest-sim.js', 'invest-corretora.js', 'invest-assistente.js', 'invest-tour.js',
+  'invest.js', 'invest-store.js', 'invest-sim.js', 'invest-corretora.js', 'invest-assistente.js', 'invest-nav.js', 'invest-tour.js',
   'https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js'];
 
 // 'reload' ignora o cache HTTP do navegador na instalação, senão a versão nova guardaria arquivos velhos

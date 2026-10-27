@@ -57,8 +57,8 @@
 </head>
 <body>
 <div class="app-bar">
-  <small id="app-status">Carregando dados…</small>
-  <a class="app-btn" id="app-update" href="https://github.com/Arthas3000/ativos/actions/workflows/atualizar.yml" target="_blank" rel="noopener">Atualizar dados</a>
+  <div class="app-brand"><b>Painel B3</b><small id="app-status">Carregando dados…</small></div>
+  <div class="app-actions"><a class="app-btn" id="app-update" href="https://github.com/Arthas3000/ativos/actions/workflows/atualizar.yml" target="_blank" rel="noopener">Atualizar dados</a></div>
 </div>
 <div id="dash-root">
 <style>
@@ -1021,6 +1021,7 @@ dash.onData(() => PB.redraw());
 <script src="invest-sim.js"></script>
 <script src="invest-corretora.js"></script>
 <script src="invest-assistente.js"></script>
+<script src="invest-nav.js"></script>
 <script src="invest-tour.js"></script>
 </body>
 </html>

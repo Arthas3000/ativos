@@ -27,7 +27,7 @@ OUT, HIST = PAINEL / "dados", PAINEL / "historico"
 LONGOS = PAINEL / "dados_longos"
 BRT = dt.timezone(dt.timedelta(hours=-3))
 UA = {"User-Agent": "Mozilla/5.0"}
-INVEST_JS = ("invest.js", "invest-store.js", "invest-sim.js", "invest-corretora.js", "invest-assistente.js",
+INVEST_JS = ("invest.js", "invest-store.js", "invest-sim.js", "invest-corretora.js", "invest-assistente.js", "invest-nav.js",
              "invest-tour.js")
 
 sys.path.insert(0, str(SCORE))
