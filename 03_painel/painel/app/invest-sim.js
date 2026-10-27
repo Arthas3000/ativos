@@ -274,9 +274,21 @@
   }
 
   function blocoAtivos(lista) {
-    var busca = h('input', { type: 'search', class: 'pb-in', id: 'sim-busca', autocomplete: 'off', 'aria-controls': 'sim-lista' });
+    var busca = h('input', { type: 'search', class: 'pb-in', id: 'sim-busca', autocomplete: 'off', placeholder: 'Buscar por código, nome ou tipo (ex.: PETR4, banco, FII)', 'aria-controls': 'sim-lista' });
     elLista = h('div', { class: 'inv-sim-list', id: 'sim-lista', role: 'group', 'aria-labelledby': 'sim-ativos-leg' });
-    var itens = lista.map(function (a) {
+    var filtro = { classe: '', so: false };
+    var elCont = h('span', { class: 'pb-note', id: 'sim-cont', role: 'status', 'aria-live': 'polite' });
+    var itens = [];
+    function filtrar() {
+      var q = busca.value.trim().toLowerCase(), n = 0;
+      itens.forEach(function (op) {
+        var ok = (!q || op.getAttribute('data-q').indexOf(q) >= 0) && (!filtro.classe || op.getAttribute('data-c') === filtro.classe) &&
+          (!filtro.so || S.sel.indexOf(op.getAttribute('data-t')) >= 0);
+        op.hidden = !ok; if (ok) n++;
+      });
+      elCont.textContent = S.sel.length + ' marcado(s) · mostrando ' + n + ' de ' + itens.length + (n === 0 ? ' — nenhum ativo com esse filtro' : '');
+    }
+    itens = lista.map(function (a) {
       var i = info(a.ticker);
       var cb = h('input', { type: 'checkbox', value: a.ticker, id: 'sim-a-' + a.ticker, checked: S.sel.indexOf(a.ticker) >= 0 });
       cb.addEventListener('change', function () {
@@ -284,17 +296,30 @@
         if (cb.checked && k < 0) S.sel.push(a.ticker); else if (!cb.checked && k >= 0) S.sel.splice(k, 1);
         if (S.auto) igualar(true);
         setErr('ativos', ''); setErr('pesos', '');
-        desenharPesos(); desenharPeriodo(); agendarSalvar();
+        desenharPesos(); desenharPeriodo(); agendarSalvar(); filtrar();
       });
-      var op = h('label', { class: 'inv-sim-opt', for: 'sim-a-' + a.ticker, 'data-q': (a.ticker + ' ' + (a.nome || '') + ' ' + (a.classe || '')).toLowerCase() }, cb,
+      return h('label', { class: 'inv-sim-opt', for: 'sim-a-' + a.ticker, 'data-t': a.ticker, 'data-c': a.classe || '', 'data-q': (a.ticker + ' ' + (a.nome || '') + ' ' + (a.classe || '') + ' ' + (a.segmento || '')).toLowerCase() }, cb,
         h('span', null, h('b', null, a.ticker), ' ', a.nome || '', ' ', h('span', { class: 'pb-label' }, '· ' + (a.classe || '') + (i ? ' · dados de ' + fmtData(i.ini) + ' a ' + fmtData(i.fim) : ''))));
-      return op;
     });
     elLista.append.apply(elLista, itens);
-    busca.addEventListener('input', function () {
-      var q = busca.value.trim().toLowerCase();
-      itens.forEach(function (op) { op.hidden = !!q && op.getAttribute('data-q').indexOf(q) < 0; });
+    busca.addEventListener('input', filtrar);
+    var botoes = {};
+    var chips = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Filtrar ativos' });
+    [['', 'Todos'], ['Ação', 'Ações'], ['FII', 'FIIs']].forEach(function (c) {
+      var b = h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': String(c[0] === '') }, c[1]);
+      b.addEventListener('click', function () {
+        filtro.classe = c[0];
+        Object.keys(botoes).forEach(function (k) { botoes[k].setAttribute('aria-pressed', String(k === c[0])); });
+        filtrar();
+      });
+      botoes[c[0]] = b; chips.appendChild(b);
     });
+    chips.appendChild(h('label', { class: 'inv-sim-opt' }, h('input', { type: 'checkbox', id: 'sim-so-marcados', onchange: function (e) { filtro.so = e.target.checked; filtrar(); } }), h('span', null, 'Só marcados')));
+    chips.appendChild(h('button', { type: 'button', class: 'pb-btn', onclick: function () {
+      S.sel.length = 0; itens.forEach(function (op) { op.querySelector('input').checked = false; });
+      setErr('ativos', ''); desenharPesos(); desenharPeriodo(); agendarSalvar(); filtrar();
+    } }, 'Limpar seleção'));
+    filtrar();
     var err = h('div', { class: 'inv-err', id: errId('ativos'), hidden: true });
     regErr('ativos', err, null);
     elPesos = h('div', { style: 'display:grid;gap:var(--cds-gap-xs)' });
@@ -303,7 +328,7 @@
     regErr('pesos', errP, null);
     return h('div', { style: 'display:grid;gap:var(--cds-gap-sm)' },
       h('div', { class: 'inv-field' }, h('label', { for: 'sim-busca', id: 'sim-ativos-leg' }, 'Ativos com histórico (busque e marque os que entram na carteira)'), busca),
-      elLista, err,
+      chips, elCont, elLista, err,
       h('fieldset', { 'aria-describedby': errId('pesos') }, h('legend', null, 'Pesos da carteira (%)'),
         elPesos,
         h('div', { class: 'pb-controls' },
