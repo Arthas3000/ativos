@@ -1,0 +1,53 @@
+﻿categoria;indicador;valor;unidade;data;fonte;confianca;obs
+juros;Selic meta;13,75;% a.a.;2026-09-16;Agência Brasil;alta;5º corte seguido, unânime
+juros;Próximo Copom;2026-11-04;data;2026-10-27;Rio Times;média;confirmar no BCB
+juros;Focus Selic fim 2026;13,25;% a.a.;2026-10-26;DGABC/Focus;alta;coletado antes do 2º turno
+juros;DI jan/28 ajuste anterior;12,859;%;2026-10-23;CNN Brasil;alta;
+juros;DI jan/28;14,80;%;2026-10-26;CNN Brasil;alta;+194 bps
+juros;DI jan/31 ajuste anterior;12,642;%;2026-10-23;CNN Brasil;alta;
+juros;DI jan/31;15,185;%;2026-10-26;CNN Brasil;alta;+254 bps - pico 15,94% às 11h02
+juros;DI jan/31 pré-1º turno;13,99;%;2026-10-02;CNN Brasil;alta;
+inflacao;Focus IPCA 2026;5,19;%;2026-10-26;CNN Brasil/Focus;alta;pré-eleição
+inflacao;Focus IPCA 2027;4,34;%;2026-10-26;CNN Brasil/Focus;alta;pré-eleição
+inflacao;Focus IPCA 2028;3,75;%;2026-10-26;CNN Brasil/Focus;alta;pré-eleição
+inflacao;IPCA-15 set/26 mensal;0,70;%;2026-09;Brasil Indicadores;média;
+inflacao;IPCA-15 set/26 12m;4,47;%;2026-09;Brasil Indicadores;média;
+cambio;Dólar comercial fechamento;5,40;R$;2026-10-26;B3 Bora Investir;alta;
+cambio;Dólar variação dia;8,25;%;2026-10-26;B3 Bora Investir;média;Money Times diverge (+0,92%) - checar PTAX
+cambio;Dólar pico intradiário;5,60;R$;2026-10-26;Guia do Investidor;média;
+cambio;Focus dólar fim 2026;5,05;R$;2026-10-26;CNN Brasil/Focus;alta;pré-eleição
+bolsa;Ibovespa fechamento;176608,23;pontos;2026-10-26;B3 Bora Investir;alta;
+bolsa;Ibovespa variação;-13,88;%;2026-10-26;B3 Bora Investir;alta;circuit breaker na abertura
+bolsa;Ibovespa mínima;169516,43;pontos;2026-10-26;B3 Bora Investir;alta;
+bolsa;Ibovespa volume;76,9;R$ bi;2026-10-26;B3 Bora Investir;alta;
+acao;SUZB3;10,08;% dia;2026-10-26;B3 Bora Investir;alta;exportadora
+acao;EMBJ3;8,89;% dia;2026-10-26;B3 Bora Investir;alta;exportadora
+acao;WEGE3;4,21;% dia;2026-10-26;B3 Bora Investir;alta;exportadora
+acao;VALE3;4,01;% dia;2026-10-26;B3 Bora Investir;alta;exportadora
+acao;KLBN11;3,24;% dia;2026-10-26;B3 Bora Investir;alta;exportadora
+acao;MGLU3;-58,23;% dia;2026-10-26;B3 Bora Investir;alta;varejo
+acao;VAMO3;-56,79;% dia;2026-10-26;B3 Bora Investir;alta;locação
+acao;HAPV3;-54,93;% dia;2026-10-26;B3 Bora Investir;alta;saúde
+acao;CEAB3;-47,47;% dia;2026-10-26;B3 Bora Investir;alta;varejo
+acao;CSAN3;-46,73;% dia;2026-10-26;B3 Bora Investir;alta;holding/infra
+acao;ASAI3 (10h57);-48,41;% intradiário;2026-10-26;BPMoney;média;não é fechamento
+acao;LREN3 (10h57);-38,07;% intradiário;2026-10-26;BPMoney;média;não é fechamento
+acao;AZZA3 (10h57);-37,30;% intradiário;2026-10-26;BPMoney;média;não é fechamento
+commodity;Brent;115,88;US$/bbl;2026-10-27;Money Times;média;fontes variam de 113 a 117
+eleicao;Lula votos válidos;51,79;%;2026-10-25;TSE via CNN/Acionista;alta;
+eleicao;Flávio Bolsonaro votos válidos;48,21;%;2026-10-25;TSE via CNN/Acionista;alta;
+fiscal;Prisma déficit primário 2026;-53,05;R$ bi;2026-10;Poder360/Prisma;alta;meta: +0,25% PIB
+fiscal;Prisma déficit primário 2027;-44;R$ bi;2026-10;Forbes/Prisma;média;
+fiscal;Dívida bruta 2026 (critério BC);83,4;% PIB;2026-10;Forbes/Prisma;média;
+fiscal;Dívida bruta 2027 (critério BC);87;% PIB;2026-10;Forbes/Prisma;média;
+fiscal;Dívida bruta 2027 (critério FMI);100;% PIB;2026;Gazeta Mercantil;média;metodologia mais ampla
+fiscal;PLOA 2027 primário governo;18,6;R$ bi;2026-09;IFI;alta;
+fiscal;PLOA 2027 primário IFI;-86,1;R$ bi;2026-09;IFI;alta;
+credito;Inadimplência crédito livre PF;7,8;%;2026;BCB via Exame;média;recorde da série
+credito;Famílias endividadas;82;%;2026-07;CNC Peic;média;
+credito;Empresas inadimplentes;9,3;milhões;2026-08;Serasa;alta;+14,3% a/a
+banco;Bradesco NPL 90;4,6;%;3T26;Blocktrends/SpaceMoney;média;
+banco;Bradesco cobertura;143;%;3T26;Blocktrends;média;era 152%
+banco;Bradesco PDD expandida;10,6;R$ bi;3T26;Blocktrends;média;+24,3% a/a
+banco;Banco do Brasil NPL 90;5,6;%;2T26;Seu Dinheiro;média;+160 bps a/a
+banco;BB provisões 3T26 (estimativa Goldman);20,3;R$ bi;3T26e;SpaceMoney;média;divulga 11/11
