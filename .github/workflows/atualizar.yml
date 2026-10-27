@@ -26,6 +26,7 @@ jobs:
           python 03_painel/atualizar.py nova-versao
           python 03_painel/atualizar.py precos
           python 03_painel/atualizar.py auto-datas
+          python 03_painel/atualizar.py historico
           python 03_painel/atualizar.py fundamentus
           python 03_painel/atualizar.py build
           python 03_painel/atualizar.py teste

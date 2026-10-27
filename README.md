@@ -27,7 +27,7 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 | `02_etapa2_score/precos_yahoo_3m.json` | Série diária de 3 meses (fechamento, máxima, mínima, volume). |
 | `02_etapa2_score/fundamentus_<data>.json` | Dados brutos do Fundamentus de cada coleta. |
 | `03_painel/` | **Painel de Oportunidades B3**: [link](https://claude.ai/artifact/CDQrUB1RafE6HBQBGwfMaj). |
-| `03_painel/atualizar.py` | Atualização: `nova-versao`, `precos`, `fundamentus`, `build`, `snapshot`, `teste`. |
+| `03_painel/atualizar.py` | Atualização: `nova-versao`, `precos`, `fundamentus`, `historico`, `build`, `site`, `snapshot`, `teste`. |
 | `03_painel/config.json` | Versão atual, datas de referência, evento de estresse, snapshot macro em uso e link do painel. |
 | `03_painel/notas_ativos.csv` | Camada qualitativa (tese, risco, sinal, confiança) e campos `travar` (dado oficial que o Fundamentus não sobrescreve). |
 | `03_painel/painel/index.html` | Código da página do painel. |
@@ -36,7 +36,26 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 | `.claude/skills/atualizar-painel-b3/` | Skill que roda a atualização completa e gera uma nova versão. |
 | `03_painel/painel/app/` | Casca do app de celular (PWA): tokens de tema, camada `dash`, manifest, service worker, ícones. |
 | `docs/` | App gerado por `atualizar.py site`, publicado pelo GitHub Pages. Não editar à mão. |
-| `.github/workflows/atualizar.yml` | Atualização manual pelo botão "Atualizar dados" do app: preços, fundamentos, score, app e snapshot. |
+| `.github/workflows/atualizar.yml` | Atualização manual pelo botão "Atualizar dados" do app: preços, fundamentos, histórico longo, score, app e snapshot. |
+| `.github/workflows/testes.yml` | Testes a cada push e pull request: `node --test` (cálculos) e `atualizar.py teste` (pipeline). |
+| `03_painel/dados_longos/` | `serie_longa.json` (5 anos diários, com dividendos) e `indices.json` (CDI e IPCA), gerados por `atualizar.py historico`. Não entram no snapshot. |
+| `03_painel/painel/app/invest*.js` | Módulo de investimentos do app: `invest.js` (cálculos), `invest-store.js` (dados e Configurações), `invest-sim.js` (Simulação), `invest-corretora.js` (Corretora), `invest-assistente.js` (Assistente de alocação), `invest-tour.js` (Tutorial). |
+| `03_painel/painel/app/tests/` | Testes dos cálculos (`node --test 03_painel/painel/app/tests/`). |
+
+## Módulo de investimentos
+
+O app do GitHub Pages (não o painel do Claude) tem três abas extras depois das oito do painel:
+
+- **Simulação:** carteira histórica com aportes mensais, dividendos e custos, comparada ao Ibovespa, ao CDI e ao IPCA (retorno nominal e real). É análise do passado: não garante resultado futuro.
+- **Corretora:** posições, caixa e transações registradas por você, mais o Assistente de alocação de aportes. Uma proposta nunca vira transação sem a sua confirmação, e o app não envia ordens.
+- **Configurações:** token de cotações, custos padrão, ativos extras, backup e fontes de dados.
+
+Pontos importantes:
+
+- **Dados só no aparelho.** Carteira, transações e ativos personalizados ficam no `localStorage` do navegador, sem servidor. Use Exportar/Importar em Configurações para fazer backup; limpar os dados do navegador apaga tudo.
+- **Token da brapi.** A cotação ao vivo usa o seu token de brapi.dev, colado em Configurações. Ele fica só neste navegador: não vai para o GitHub nem para o backup. Sem token, vale o último fechamento (marcado "atrasado") ou o preço digitado por você.
+- **Ativos extras no histórico.** Ativo personalizado só aparece na Simulação depois de entrar em `"extras": ["TICK1"]` no `03_painel/config.json`; o histórico dele chega na próxima execução de "Atualizar dados".
+- **Limitações.** Só ações e FIIs em reais na B3. Dividendos do Yahoo vêm brutos (sem IR, JCP incluído). Simulação usa preço de fechamento, sem imposto nem come-cotas. Material educacional, não é recomendação.
 
 ## Próximas etapas (planejadas)
 

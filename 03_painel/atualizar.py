@@ -6,14 +6,16 @@ Uso (de qualquer pasta):
   python 03_painel/atualizar.py fundamentus [--nao-aplicar] # Fundamentus -> colunas automaticas de dados_entrada.csv
   python 03_painel/atualizar.py build                       # score + 03_painel/dados/*.json + historico de scores
   python 03_painel/atualizar.py auto-datas                  # data_ref = ultimo pregao fechado; 1m e 1s antes
+  python 03_painel/atualizar.py historico                   # Yahoo 5a + BCB -> 03_painel/dados_longos/{serie_longa,indices}.json
   python 03_painel/atualizar.py site                        # app PWA em docs/ (GitHub Pages)
   python 03_painel/atualizar.py snapshot                    # copia a versao atual para 03_painel/historico/<data>_<versao>/
+                                                            # (sem dados_longos: e reproduzivel pelo comando historico e grande)
   python 03_painel/atualizar.py teste                       # checagens de consistencia
 
 Colunas manuais (cet1, cobertura, npl90, credito, perfil, ll12_rec, dy_rec, obs, var_stress...) nunca sao tocadas
 pelo script. Colunas listadas em `travar` de notas_ativos.csv tambem nao (dado oficial que substitui o Fundamentus).
 """
-import csv, json, re, shutil, sys, unicodedata, urllib.request
+import csv, json, re, shutil, sys, time, unicodedata, urllib.request
 import datetime as dt
 from html import unescape
 from pathlib import Path
@@ -22,8 +24,11 @@ ROOT = Path(__file__).resolve().parent.parent
 PAINEL, SCORE = ROOT / "03_painel", ROOT / "02_etapa2_score"
 CFG_PATH, ENTRADA = PAINEL / "config.json", SCORE / "dados_entrada.csv"
 OUT, HIST = PAINEL / "dados", PAINEL / "historico"
+LONGOS = PAINEL / "dados_longos"
 BRT = dt.timezone(dt.timedelta(hours=-3))
 UA = {"User-Agent": "Mozilla/5.0"}
+INVEST_JS = ("invest.js", "invest-store.js", "invest-sim.js", "invest-corretora.js", "invest-assistente.js",
+             "invest-tour.js")
 
 sys.path.insert(0, str(SCORE))
 import score  # noqa: E402
@@ -276,6 +281,112 @@ def cmd_build():
         print(f"03_painel/dados/{name}.json: {len(data)} linhas")
 
 
+# ---------------------------------------------------------------- historico longo (Yahoo 5 anos + BCB)
+def parse_yahoo(js, data_ref, casas=2):
+    """Resposta da chart API do Yahoo (completa ou so result[0]) -> {'d','c','div'} (funcao pura, sem rede).
+    d crescente e sem duplicatas, so datas <= data_ref; close nulo e descartado; div = [[data_ex, valor]] ordenado."""
+    r = js["chart"]["result"][0] if "chart" in js else js
+    q = r["indicators"]["quote"][0]
+    por_data = {}
+    for i, ts in enumerate(r.get("timestamp") or []):
+        c = q["close"][i] if i < len(q["close"]) else None
+        d = dt.datetime.fromtimestamp(ts, BRT).date().isoformat()
+        if c is None or d > data_ref:
+            continue
+        por_data[d] = round(float(c), casas)          # data repetida: vale a ultima linha
+    datas = sorted(por_data)
+    divs = {}
+    for ev in ((r.get("events") or {}).get("dividends") or {}).values():
+        d = dt.datetime.fromtimestamp(ev["date"], BRT).date().isoformat()
+        if d <= data_ref and ev.get("amount") and ev["amount"] > 0:
+            divs[d] = round(float(ev["amount"]), 4)
+    return {"d": datas, "c": [por_data[d] for d in datas], "div": [[d, divs[d]] for d in sorted(divs)]}
+
+
+def parse_sgs(lista, mensal=False):
+    """SGS do BCB [{'data': 'DD/MM/AAAA', 'valor': '0.029256'}] -> (datas, valores). Mensal: datas 'AAAA-MM'."""
+    por_data = {}
+    for x in lista:
+        try:
+            dd, mm, aa = x["data"].split("/")
+            d = f"{aa}-{mm}" if mensal else f"{aa}-{mm}-{dd}"
+            por_data[d] = float(str(x["valor"]).replace(",", "."))
+        except (KeyError, ValueError, AttributeError):
+            continue                                   # linha sem valor ou data invalida
+    datas = sorted(por_data)
+    return datas, [por_data[d] for d in datas]
+
+
+def http_json(url):
+    return json.load(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30))
+
+
+def cmd_historico():
+    """Serie diaria de 5 anos (fechamento + dividendos) e indices CDI/IPCA em 03_painel/dados_longos/.
+    Falha por ticker ou serie vai para 'falhas' e o comando termina com codigo 0."""
+    c = cfg()
+    ref = c["data_ref"]
+    agora = dt.datetime.now(BRT).isoformat(timespec="seconds")
+    nomes = {t: n["nome"] for t, n in notas().items()}
+    tickers = [r["ticker"] for r in read_csv(ENTRADA)] + [t for t in c.get("extras", [])] + ["IBOV"]
+    tickers = list(dict.fromkeys(t.strip().upper() for t in tickers if t.strip()))
+    ativos, falhas = {}, {}
+    ant = json.loads((LONGOS / "serie_longa.json").read_text(encoding="utf-8")) if (LONGOS / "serie_longa.json").exists() else {}
+    for t in tickers:
+        sym = "^BVSP" if t == "IBOV" else t + ".SA"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=5y&interval=1d&events=div"
+        try:
+            js = http_json(url)
+            moeda = (js["chart"]["result"][0]["meta"].get("currency") or "BRL").upper()
+            if moeda != "BRL":
+                raise ValueError(f"moeda {moeda} (so BRL)")
+            s = parse_yahoo(js, ref, 0 if t == "IBOV" else 2)
+            if not s["d"]:
+                raise ValueError("sem pregoes")
+            meta = js["chart"]["result"][0]["meta"]
+            ativos[t] = {"nome": "Ibovespa" if t == "IBOV" else nomes.get(t) or meta.get("longName") or meta.get("shortName") or t,
+                         "moeda": "BRL", **s}
+            print(f"{t:7s} {len(s['d'])} pregoes, {len(s['div'])} dividendos, {s['d'][0]} a {s['d'][-1]}")
+        except Exception as e:  # noqa: BLE001 - qualquer falha de rede/formato vira aviso, nunca aborta
+            velho = (ant.get("ativos") or {}).get(t)
+            if velho and velho.get("d"):                 # falha passageira nao apaga a ultima serie boa
+                ativos[t] = velho
+                falhas[t] = f"{e} (mantida a serie anterior, ate {velho['d'][-1]})"
+            else:
+                falhas[t] = str(e)
+            print(f"{t:7s} FALHOU: {falhas[t]}")
+        time.sleep(0.2)
+    LONGOS.mkdir(exist_ok=True)
+    fonte = ("Yahoo Finance chart API (range=5y, interval=1d, events=div); close ajustado so por desdobramento; "
+             "dividendos por acao na data ex")
+    serie = {"gerado_em": agora, "fonte": fonte, "data_ref": ref, "ativos": ativos, "falhas": falhas}
+    (LONGOS / "serie_longa.json").write_text(json.dumps(serie, ensure_ascii=False), encoding="utf-8")
+
+    fim = dt.date.fromisoformat(ref)
+    ini = fim.replace(year=fim.year - 5, day=1) - dt.timedelta(days=31)          # 5 anos + 1 mes
+    idx = {"gerado_em": agora, "fonte": "Banco Central do Brasil — SGS (série 12 CDI % a.d.; série 433 IPCA % a.m.)"}
+    falhas_i = {}
+    idx_ant = json.loads((LONGOS / "indices.json").read_text(encoding="utf-8")) if (LONGOS / "indices.json").exists() else {}
+    for nome, n, unidade, mensal in (("cdi", 12, "% ao dia", False), ("ipca", 433, "% no mês", True)):
+        url = (f"https://api.bcb.gov.br/dados/serie/bcdata.sgs.{n}/dados?formato=json"
+               f"&dataInicial={ini.strftime('%d/%m/%Y')}&dataFinal={fim.strftime('%d/%m/%Y')}")
+        try:
+            datas, vals = parse_sgs(http_json(url), mensal)
+            if not datas:
+                raise ValueError("serie vazia")
+            print(f"{nome.upper():7s} {len(datas)} pontos, {datas[0]} a {datas[-1]}")
+        except Exception as e:  # noqa: BLE001
+            velho = idx_ant.get(nome) or {}
+            datas, vals = velho.get("m" if mensal else "d") or [], velho.get("v") or []
+            falhas_i[nome] = f"{e} (mantida a serie anterior)" if datas else str(e)
+            print(f"{nome.upper():7s} FALHOU: {falhas_i[nome]}")
+        idx[nome] = {"serie": n, "unidade": unidade, ("m" if mensal else "d"): datas, "v": vals}
+    idx["falhas"] = falhas_i
+    (LONGOS / "indices.json").write_text(json.dumps(idx, ensure_ascii=False), encoding="utf-8")
+    print(f"historico: {len(ativos)} series, {len(falhas)} falhas; indices com {len(falhas_i)} falhas "
+          f"(03_painel/dados_longos/)")
+
+
 # ---------------------------------------------------------------- datas automaticas e site
 def cmd_auto_datas():
     """data_ref = ultimo pregao fechado (hoje so conta depois das 18h de Brasilia); 1m e 1s antes dele."""
@@ -290,8 +401,23 @@ def cmd_auto_datas():
     print(f"data_ref {c['data_ref']} · 1 mes {c['data_1m']} · 1 semana {c['data_1s']}")
 
 
+def indice_raiz(html):
+    """index.html da raiz (GitHub Pages serve a raiz): mesmo html, com referencias apontando para docs/.
+    Substituicoes literais; cada uma precisa acontecer, senao falha (assert)."""
+    subs = [("window.PB_BASE = '';", "window.PB_BASE = 'docs/';"),
+            ('href="manifest.webmanifest"', 'href="docs/manifest.webmanifest"'),
+            ('href="icon-192.png"', 'href="docs/icon-192.png"'),
+            ("register('sw.js')", "register('docs/sw.js', { scope: './docs/' })")]
+    subs += [(f'src="{f}"', f'src="docs/{f}"') for f in INVEST_JS]
+    for a, b in subs:
+        assert a in html, f"index da raiz: trecho nao encontrado: {a}"
+        html = html.replace(a, b)
+    return html
+
+
 def cmd_site():
-    """Gera o app PWA em docs/ (GitHub Pages) com a mesma pagina do painel e os dados atuais."""
+    """Gera o app PWA em docs/ (GitHub Pages) e o index.html da raiz, com a mesma pagina do painel e os dados atuais.
+    Copia tambem os invest*.js e, se existirem, os JSONs de 03_painel/dados_longos/ (para docs/dados/)."""
     c, app, docs = cfg(), PAINEL / "painel" / "app", ROOT / "docs"
     page = (PAINEL / "painel" / "index.html").read_text(encoding="utf-8")
     scripts = re.findall(r"<script>.*?</script>", page, re.S)
@@ -302,10 +428,17 @@ def cmd_site():
     html = shell.replace("<!--PAINEL-->", markup).replace("<!--SCRIPTS-->", "\n".join(scripts)).replace("{{ACTIONS_URL}}", actions)
     (docs / "dados").mkdir(parents=True, exist_ok=True)
     (docs / "index.html").write_text(html, encoding="utf-8")
-    for f in ("sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"):
-        shutil.copy2(app / f, docs / f)
+    (ROOT / "index.html").write_text(indice_raiz(html), encoding="utf-8")
+    for f in ("sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png") + INVEST_JS:
+        if (app / f).exists():
+            shutil.copy2(app / f, docs / f)
+        else:
+            print(f"AVISO: app/{f} nao existe; nao copiado")
     for f in OUT.glob("*.json"):
         shutil.copy2(f, docs / "dados" / f.name)
+    if LONGOS.exists():
+        for f in LONGOS.glob("*.json"):
+            shutil.copy2(f, docs / "dados" / f.name)
     (docs / ".nojekyll").write_text("", encoding="utf-8")
     print(f"docs/ gerado ({len(html) // 1024} KB) · botao Atualizar -> {actions}")
 
@@ -320,6 +453,8 @@ def cmd_nova_versao():
 
 
 def cmd_snapshot():
+    """Copia o estado da versao atual para historico/<data>_<versao>/. NAO copia 03_painel/dados_longos/ (serie de 5 anos:
+    e grande e reproduzivel com o comando historico)."""
     c = cfg()
     dest = HIST / f"{c['data_versao']}_{c['versao']}"
     if dest.exists():
@@ -334,6 +469,36 @@ def cmd_snapshot():
     print(f"snapshot: {dest.relative_to(ROOT)}")
 
 
+def teste_historico():
+    """Parsers do historico longo e do index da raiz, offline, com fixtures em memoria."""
+    ts = lambda d, h=13: int(dt.datetime.fromisoformat(f"{d}T{h:02d}:00:00").replace(tzinfo=BRT).timestamp())
+    js = {"chart": {"result": [{"meta": {"currency": "BRL"},
+          "timestamp": [ts("2026-10-22"), ts("2026-10-21"), ts("2026-10-23"), ts("2026-10-26"), ts("2026-10-27")],
+          "indicators": {"quote": [{"close": [10.005, 9.0, None, 11.114, 12.0]}]},
+          "events": {"dividends": {"1": {"date": ts("2026-10-26"), "amount": 0.123456},
+                                    "2": {"date": ts("2026-10-21"), "amount": 0.5},
+                                    "3": {"date": ts("2026-10-27"), "amount": 9.0}}}}]}}
+    s = parse_yahoo(js, "2026-10-26")
+    assert s["d"] == ["2026-10-21", "2026-10-22", "2026-10-26"], s["d"]              # fora de ordem ordenado; nulo e pos-data_ref fora
+    assert s["c"] == [9.0, round(10.005, 2), 11.11], s["c"]
+    assert s["div"] == [["2026-10-21", 0.5], ["2026-10-26", 0.1235]], s["div"]       # ordenado, 4 casas, apos data_ref descartado
+    assert parse_yahoo(js["chart"]["result"][0], "2026-10-26") == s                   # aceita so result[0]
+    assert parse_yahoo(js, "2026-10-26", 0)["c"] == [9.0, 10.0, 11.0]
+    sem = {"timestamp": [ts("2026-10-21")], "indicators": {"quote": [{"close": [None]}]}}
+    assert parse_yahoo(sem, "2026-10-26") == {"d": [], "c": [], "div": []}
+    d, v = parse_sgs([{"data": "27/10/2021", "valor": "0.029256"}, {"data": "26/10/2021", "valor": "0,03"},
+                      {"data": "28/10/2021", "valor": ""}])
+    assert d == ["2021-10-26", "2021-10-27"] and v == [0.03, 0.029256], (d, v)
+    d, v = parse_sgs([{"data": "01/09/2026", "valor": "0.48"}, {"data": "01/08/2026", "valor": "-0.11"}], mensal=True)
+    assert d == ["2026-08", "2026-09"] and v == [-0.11, 0.48], (d, v)
+    shell = (PAINEL / "painel" / "app" / "shell.html").read_text(encoding="utf-8")
+    html = shell.replace("<!--PAINEL-->", "").replace("<!--SCRIPTS-->", "").replace("{{ACTIONS_URL}}", "#")
+    raiz = indice_raiz(html)
+    assert "PB_BASE = 'docs/'" in raiz and "register('docs/sw.js', { scope: './docs/' })" in raiz
+    assert all(f'src="docs/{f}"' in raiz for f in INVEST_JS) and 'href="docs/manifest.webmanifest"' in raiz
+    print("ok: parsers do historico longo e index da raiz")
+
+
 def cmd_teste():
     ent, nts = read_csv(ENTRADA), notas()
     ativos = json.loads((OUT / "ativos.json").read_text(encoding="utf-8"))
@@ -345,10 +510,11 @@ def cmd_teste():
     assert br("1.234,5%") == 1234.5 and br("-") is None and norm("Cotação") == "cotacao"
     assert pick(["P/L", "6,91", "Lucro Líquido", "1", "Lucro Líquido", "2"], "Lucro Líquido", 1) == "2"
     print(f"ok: {len(ativos)} ativos consistentes")
+    teste_historico()
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     {"precos": cmd_precos, "build": cmd_build, "snapshot": cmd_snapshot, "teste": cmd_teste,
-     "nova-versao": cmd_nova_versao, "auto-datas": cmd_auto_datas, "site": cmd_site,
+     "nova-versao": cmd_nova_versao, "auto-datas": cmd_auto_datas, "site": cmd_site, "historico": cmd_historico,
      "fundamentus": lambda: cmd_fundamentus(apply="--nao-aplicar" not in sys.argv)}.get(cmd, lambda: print(__doc__))()

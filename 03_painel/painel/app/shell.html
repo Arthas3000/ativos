@@ -62,6 +62,7 @@
 <!--PAINEL-->
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>window.PB_BASE = '';</script>
 <script>
 // Camada mínima com a mesma API "dash" do painel no Claude: lê os JSON de dados/ e redesenha
 window.dash = (() => {
@@ -77,7 +78,7 @@ window.dash = (() => {
     });
   };
   const notify = () => { recalc(); subs.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }); };
-  const load = () => Promise.all(IDS.map((id) => fetch('dados/' + id + '.json', { cache: 'no-cache' })
+  const load = () => Promise.all(IDS.map((id) => fetch(PB_BASE + 'dados/' + id + '.json', { cache: 'no-cache' })
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((data) => { src[id] = { status: 'ok', data, columns: data.length ? Object.keys(data[0]) : [] }; })
     .catch((e) => { src[id] = { status: 'error', data: [], message: String(e) }; })))
@@ -102,5 +103,11 @@ dash.onData(() => {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 <!--SCRIPTS-->
+<script src="invest.js"></script>
+<script src="invest-store.js"></script>
+<script src="invest-sim.js"></script>
+<script src="invest-corretora.js"></script>
+<script src="invest-assistente.js"></script>
+<script src="invest-tour.js"></script>
 </body>
 </html>

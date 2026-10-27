@@ -43,6 +43,12 @@ Comandos rodam na raiz do projeto. No Windows, `python`.
    ```bash
    python 03_painel/atualizar.py precos
    ```
+   Histórico longo (5 anos diários com dividendos, CDI e IPCA) para a aba Simulação do app; falhas por ativo não abortam o comando:
+   ```bash
+   python 03_painel/atualizar.py historico
+   ```
+   Gera `03_painel/dados_longos/serie_longa.json` e `indices.json`. Os ativos extras vêm de `config.json["extras"]`. Rode depois de ajustar as datas abaixo, pois ele usa `data_ref`.
+
    Depois ajuste em `config.json`:
    - `data_ref`: último pregão fechado. Não use pregão em andamento.
    - `data_1m`: pregão de cerca de 1 mês antes.
@@ -122,7 +128,7 @@ Comandos rodam na raiz do projeto. No Windows, `python`.
 
 O botão "Atualizar dados" do app abre `.github/workflows/atualizar.yml` no GitHub, onde o usuário toca em "Run workflow".
 O workflow roda só a parte automática:
-- `nova-versao`, `precos`, `auto-datas`, `fundamentus`;
+- `nova-versao`, `precos`, `auto-datas`, `historico`, `fundamentus`;
 - `build`, `teste`, `site`, `snapshot`;
 - e o commit.
 

@@ -10,5 +10,6 @@
   "macro_csv": "dados/snapshot_mercado_2026-10-26.csv",
   "painel_url": "https://claude.ai/artifact/CDQrUB1RafE6HBQBGwfMaj",
   "github_repo": "Arthas3000/ativos",
-  "app_url": "https://arthas3000.github.io/ativos/"
+  "app_url": "https://arthas3000.github.io/ativos/",
+  "extras": []
 }
