@@ -51,6 +51,22 @@ O app do GitHub Pages (não o painel do Claude) organiza tudo em quatro áreas: 
 - **Ajustes** (seções Cotações, Custos e lotes, Ativos extras, Backup, Fontes de dados).
 - **Navegação:** o app tem quatro áreas (Mercado, Minha carteira, Simulador, Ajustes), que viram uma barra no rodapé no celular. Cada área se divide em seções, e cada seção tem endereço próprio (ex.: `#corretora/caixa`). O botão **Como usar** abre o tour guiado; o **Glossário** (em Mercado) e os botões **?** ao lado dos termos explicam o vocabulário técnico. A revisão de UX está em `UX_REVISAO.md`.
 
+### Modo Fácil e modo Avançado
+
+Um alternador na barra superior troca a **apresentação**, nunca os dados nem os cálculos (`invest-modo.js`; escolha guardada só no aparelho). Quem já tem transações começa no Avançado; os demais, no Fácil.
+
+| Elemento | Fácil (2–5 min) | Avançado (15–20 min) |
+|---|---|---|
+| Mercado | aba **Resumo** (cenário, 3 primeiros, alertas com riscos, sua carteira) + Ranking, Ficha, Glossário | todas as abas |
+| Risco do Simulador | nível, queda máxima e oscilação em frases, mais os avisos | tabela carteira × Ibovespa × CDI, fórmulas e limites |
+| Concentração | nível e frase | HHI, nº efetivo de ativos, maior posição, faixas |
+| Simulador | campos essenciais; “premissas em uso” em uma linha | todos os parâmetros, retorno por ativo, XIRR, lista de premissas |
+| Ajustes / carteira | só o essencial (Cotações, Backup…) | também Custos, Ativos extras, Fontes, Meus ativos |
+
+Trocar de modo mantém aba, ativo escolhido, carteira, parâmetros e resultados; parâmetros escondidos no Fácil continuam valendo e aparecem como “premissas em uso”. Avisos e limitações nunca somem. Um link para tela só do Avançado abre nele.
+
+**Risco e concentração** (`INVCalc.concentracao`, `riscoSerie`, `drawdown`, `volatilidadeAnual`): HHI = Σ(peso %)², volatilidade = desvio padrão amostral dos retornos diários × √252, queda máxima pico-a-vale; retornos seguem a convenção do TWR (aportes não contam). Fórmulas adaptadas de `tradermonty/claude-trading-skills` (MIT, skill `portfolio-manager`); as faixas de classificação são orientativas. Validação: testes com valores calculados à parte em Python e conferência com a série real do PETR4 (volatilidade 33,7246% e queda −43,08% idênticas em Python e JS).
+
 Pontos importantes:
 
 - **Dados só no aparelho.** Carteira, transações e ativos personalizados ficam no `localStorage` do navegador, sem servidor. Use Exportar/Importar em Ajustes › Backup para fazer backup; limpar os dados do navegador apaga tudo.

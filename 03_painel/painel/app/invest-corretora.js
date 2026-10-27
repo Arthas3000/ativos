@@ -164,6 +164,7 @@
     });
     return { st, txs, ef, pos, caixa, refs, precos, aloc: C.alocacao(pos, precos) };
   };
+  INV.carteiraDados = dados;   // leitura dos mesmos dados derivados (Resumo do modo Fácil)
   const efSem = (d, id) => id ? d.ef.filter((t) => t.id !== id) : d.ef;
   const cfg = () => {
     const c = lerInv(() => INV.estado().config, {}) || {};
@@ -179,6 +180,7 @@
   /* 1. Resumo */
   R.tiles = h('div', { class: 'pb-tiles' });
   R.avisosResumo = h('div', { 'aria-live': 'polite' });
+  R.conc = h('div');
   R.avisosArm = h('div', { class: 'inv-cor-armaz', 'aria-live': 'polite' });
   const cResumo = card('Resumo da carteira real',
     h('p', { class: 'pb-note' }, 'Só o que você registrou, avaliado pelo último fechamento disponível (ou pelo preço manual de um ativo seu). Material educacional; não é recomendação.'),
@@ -342,7 +344,7 @@
     id: ID, rotulo: 'Seções da carteira',
     antes: [R.avisosArm],
     itens: [
-      { id: 'resumo', rotulo: 'Resumo', nodes: [cResumo, cPassos, cAtalhos] },
+      { id: 'resumo', rotulo: 'Resumo', nodes: [cResumo, R.conc, cPassos, cAtalhos] },
       { id: 'posicoes', rotulo: 'Posições', nodes: [cPos],
         intro: 'Quanto você tem de cada ativo, quanto pagou e quanto vale hoje. Aqui você também define o alvo (%) de cada um.' },
       { id: 'operar', rotulo: 'Comprar ou vender', nodes: [cTrade] },
@@ -396,6 +398,10 @@
     if (d.aloc.semPreco && d.aloc.semPreco.length) av.push(avisoEl('Sem preço de referência para: ' + d.aloc.semPreco.join(', ') + '. Esses ativos não entram no valor de mercado nem no resultado. Informe um preço manual em "Meus ativos" (ativos próprios) ou aguarde a próxima atualização de dados.', 'warn'));
     if (d.caixa < 0) av.push(avisoEl('O caixa registrado está negativo. Confira se falta registrar um depósito.', 'warn'));
     R.avisosResumo.replaceChildren(...av);
+    // concentração: mesmo cálculo do Resumo do modo Fácil (INVCalc.concentracao); o detalhe aparece só no Avançado
+    const vals = d.aloc.linhas.filter((l) => l.valorCent > 0).map((l) => l.valorCent);
+    const modo = window.INVModo;
+    R.conc.replaceChildren(...(vals.length && modo ? [modo.cartaoConcentracao(C.concentracao(vals))] : []));
   }
 
   /* ---------- renderização: posições ---------- */

@@ -1,0 +1,374 @@
+/* Painel B3 — modo Fácil e modo Avançado (INVModo).
+ * Os dois modos leem os MESMOS dados e os MESMOS cálculos (INVCalc, dash). O modo só muda a apresentação:
+ *  - elementos com data-so-avancado somem no Fácil; elementos com data-so-facil somem no Avançado;
+ *  - o Fácil troca as abas densas do Mercado por uma tela de Resumo e esconde seções administrativas;
+ *  - avisos, riscos e limitações nunca recebem data-so-avancado.
+ * O modo fica em INV.preferencias (só neste aparelho). Trocar de modo não recarrega a página nem apaga estado.
+ * Material educacional; não é recomendação de investimento. */
+(function () {
+  'use strict';
+  var W = window, PB = W.PB, INV = W.INV, C = W.INVCalc, NAV = W.INVNav;
+  if (!PB || !INV || !NAV) return;
+  var raiz = document.querySelector('div.pb'), nav = document.querySelector('nav.pb-tabs'), barra = document.querySelector('.app-bar');
+  if (!raiz || !nav) return;
+
+  var ROTULO = { facil: 'Fácil', avancado: 'Avançado' };
+  var DICA = { facil: 'Fácil: o essencial, em 2 a 5 minutos', avancado: 'Avançado: análise detalhada, em 15 a 20 minutos' };
+  // abas do Mercado que só existem no Avançado (o Fácil as resume na tela Resumo) e a aba que só existe no Fácil
+  var TABS_AV = ['geral', 'valor', 'precos', 'macro', 'historico', 'metodo'];
+  var TABS_FACIL = ['resumo'];
+  // seções escondidas no Fácil: nada some dos dados, só da navegação
+  var SECOES_AV = { corretora: ['ativos'], config: ['custos', 'extras', 'fontes'] };
+
+  function h(tag, attrs) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      var v = attrs[k];
+      if (v === null || v === undefined || v === false) return;
+      if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+      else if (k.slice(0, 2) === 'on' && typeof v === 'function') n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    });
+    for (var i = 2; i < arguments.length; i++) {
+      var c = arguments[i];
+      if (Array.isArray(c)) c.forEach(function (x) { if (x !== null && x !== undefined && x !== false) n.append(x); });
+      else if (c !== null && c !== undefined && c !== false) n.append(c);
+    }
+    return n;
+  }
+  function lerPref() { try { return INV.preferencias.ler() || {}; } catch (e) { return {}; } }
+  function gravarPref(fn) { try { INV.preferencias.gravar(fn); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
+  var num = function (x, d) { return x === null || x === undefined || !isFinite(x) ? '—' : PB.num(x, d === undefined ? 1 : d); };
+  var dt = function (s) { return s ? PB.dataBR(s) : '—'; };
+
+  /* ---------- estado do modo ---------- */
+  var ouvintes = [];
+  var modo = 'avancado';
+  (function inicial() {
+    var u = lerPref(), tem = false;
+    try { tem = ((INV.estado().transacoes || []).length > 0); } catch (e) { /* ok */ }
+    // quem já usa o app (com registros) continua vendo tudo; quem chega agora começa no Fácil
+    modo = u.modo === 'facil' || u.modo === 'avancado' ? u.modo : (tem ? 'avancado' : 'facil');
+  })();
+
+  /* ---------- estilo ---------- */
+  var css = [
+    'html[data-modo="facil"] [data-so-avancado]{display:none!important}',
+    'html[data-modo="avancado"] [data-so-facil]{display:none!important}',
+    '.inv-modo{display:inline-flex;gap:.15rem;padding:.15rem;background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:999px}',
+    '.inv-modo button{font:inherit;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);background:none;border:0;border-radius:999px;padding:.3rem .8rem;min-height:2rem;cursor:pointer;white-space:nowrap}',
+    '.inv-modo button:hover{color:var(--color-fg)}',
+    '.inv-modo button[aria-checked="true"]{background:var(--c0);color:var(--color-bg);font-weight:500}',
+    '.inv-modo button:focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}',
+    '.inv-chip{display:inline-flex;align-items:center;gap:.35rem;border:1px solid currentColor;border-radius:999px;padding:.1rem .65rem;font-size:var(--cds-font-size-caption);font-weight:500;white-space:nowrap}',
+    '.inv-chip.baixo,.inv-chip.baixa{color:var(--color-ok)}',
+    '.inv-chip.moderado,.inv-chip.moderada{color:var(--color-warn)}',
+    '.inv-chip.alto,.inv-chip.alta,.inv-chip.muito-alta{color:var(--color-bad)}',
+    '.inv-chip.nd{color:var(--color-fg-muted)}',
+    '.inv-risco{display:grid;gap:var(--cds-gap-sm)}',
+    '.inv-risco-linha{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);align-items:center}',
+    '.inv-risco ul{margin:0;padding-left:1.1rem;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
+    '.inv-risco [data-so-avancado]{border-top:1px solid var(--color-border-line);padding-top:var(--cds-pad-sm)}',
+    '.inv-risco h3{margin:0;font-size:var(--cds-font-size-body);font-weight:500}',
+    '.inv-resumo-lista{display:grid;gap:0;list-style:none;margin:0;padding:0}',
+    '.inv-resumo-lista li{display:grid;gap:.15rem;padding:var(--cds-pad-sm) 0;border-top:1px solid var(--color-border-line)}',
+    '.inv-resumo-lista li:first-child{border-top:0}',
+    '.inv-resumo-lista .l{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}',
+    '.inv-resumo-lista .m{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
+    '.inv-modo-aviso{margin:0;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
+    '@media (max-width:640px){.inv-modo button{padding:.3rem .6rem}.app-actions{gap:.35rem;flex:none}.app-brand{flex:1 1 0;overflow:hidden}.app-brand small{display:none}}'
+  ].join('\n');
+  var st = document.createElement('style'); st.id = 'inv-modo-css'; st.textContent = css; document.head.appendChild(st);
+
+  /* ---------- botão alternador (barra superior) ---------- */
+  var btn = {};
+  var grupo = h('div', { class: 'inv-modo', role: 'radiogroup', 'aria-label': 'Modo de uso do app' });
+  ['facil', 'avancado'].forEach(function (m) {
+    var b = h('button', { type: 'button', role: 'radio', 'aria-checked': 'false', 'data-modo': m, title: DICA[m], tabindex: '-1' }, ROTULO[m]);
+    b.addEventListener('click', function () { definir(m, true); });
+    btn[m] = b; grupo.appendChild(b);
+  });
+  grupo.addEventListener('keydown', function (ev) {
+    var alvo = ev.key === 'ArrowRight' || ev.key === 'ArrowDown' ? (modo === 'facil' ? 'avancado' : 'facil')
+      : ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' ? (modo === 'avancado' ? 'facil' : 'avancado') : null;
+    if (!alvo) return;
+    ev.preventDefault(); definir(alvo, true); btn[alvo].focus();
+  });
+  var acoes = barra && barra.querySelector('.app-actions');
+  if (acoes) acoes.insertBefore(grupo, acoes.firstChild); else if (barra) barra.appendChild(grupo); else raiz.insertBefore(grupo, raiz.firstChild);
+  var anuncio = h('div', { class: 'inv-sr', role: 'status', 'aria-live': 'polite' });
+  document.body.appendChild(anuncio);
+
+  /* ---------- navegação por modo ---------- */
+  var grupoDe = function (tab) { for (var i = 0; i < NAV.grupos.length; i++) if (NAV.grupos[i].abas.indexOf(tab) >= 0) return NAV.grupos[i]; return NAV.grupos[0]; };
+  var abaOculta = function (tab, m) { return m === 'facil' ? TABS_AV.indexOf(tab) >= 0 : TABS_FACIL.indexOf(tab) >= 0; };
+  function secaoOculta(pg, sc, m) { return m === 'facil' && (SECOES_AV[pg] || []).indexOf(sc) >= 0; }
+  function atualizarNavegacao() {
+    [].forEach.call(nav.querySelectorAll('.pb-tab'), function (b) {
+      var t = b.dataset.tab;
+      b.hidden = grupoDe(t).id !== 'mercado' || abaOculta(t, modo);
+    });
+    Object.keys(SECOES_AV).forEach(function (pg) {
+      SECOES_AV[pg].forEach(function (sc) {
+        var b = document.getElementById('inv-sub-' + pg + '-' + sc);
+        if (b) b.hidden = modo === 'facil';
+      });
+    });
+  }
+  // seção atual de uma página com seções (lida do botão marcado)
+  function secaoAtual(pg) {
+    var b = document.querySelector('#' + pg + ' .inv-sub-tab[aria-selected="true"], [data-page="' + pg + '"] .inv-sub-tab[aria-selected="true"]');
+    return b ? b.id.replace('inv-sub-' + pg + '-', '') : null;
+  }
+  // ao trocar de modo, mantém o contexto (ativo escolhido, carteira, filtros) e só sai de telas que o novo modo não tem
+  function reposicionar(deLink) {
+    var tab = PB.current;
+    if (modo === 'facil' && TABS_AV.indexOf(tab) >= 0) { if (deLink) { modo = 'avancado'; return false; } PB.show('resumo'); }
+    else if (modo === 'avancado' && TABS_FACIL.indexOf(tab) >= 0) PB.show('geral');
+    var sc = secaoAtual(PB.current);
+    if (sc && secaoOculta(PB.current, sc, modo)) {
+      if (deLink) { modo = 'avancado'; return false; }
+      INV.ir(PB.current, PB.current === 'config' ? 'cotacoes' : 'resumo');
+    }
+    return true;
+  }
+  function aplicar(persistir, deLink) {
+    var ok = reposicionar(deLink);
+    if (!ok) { /* um link levou a uma tela do Avançado: abre nele */ }
+    document.documentElement.setAttribute('data-modo', modo);
+    ['facil', 'avancado'].forEach(function (m) {
+      btn[m].setAttribute('aria-checked', String(m === modo));
+      btn[m].tabIndex = m === modo ? 0 : -1;
+    });
+    atualizarNavegacao();
+    if (persistir) gravarPref(function (u) { u.modo = modo; });
+    ouvintes.forEach(function (fn) { try { fn(modo); } catch (e) { console.error(e); } });
+    try { PB.redraw(); } catch (e) { console.error(e); }
+  }
+  function definir(m, persistir) {
+    if (m !== 'facil' && m !== 'avancado') return;
+    var mudou = m !== modo;
+    modo = m;
+    aplicar(persistir !== false);
+    if (mudou) anuncio.textContent = 'Modo ' + ROTULO[m] + ' ativado. ' + DICA[m] + '.';
+  }
+  // abre uma tela (e seção) no Avançado a partir do Fácil, sem perder o ativo escolhido nem os dados registrados
+  function irAvancado(tab, secao) {
+    definir('avancado', true);
+    if (tab) INV.ir(tab, secao);
+    try { W.scrollTo({ top: 0 }); } catch (e) { /* ok */ }
+  }
+
+  /* ---------- tela "Resumo" (só Fácil) ---------- */
+  var pagina = h('section', { class: 'pb-page', id: 'resumo', 'data-page': 'resumo', hidden: true });
+  var primeira = raiz.querySelector('[data-page="geral"]');
+  raiz.insertBefore(pagina, primeira || null);
+  var aba = h('button', { class: 'pb-tab', role: 'tab', 'data-tab': 'resumo', 'aria-selected': 'false' }, 'Resumo');
+  aba.addEventListener('click', function () { PB.show('resumo'); });
+  nav.insertBefore(aba, nav.firstChild);
+  NAV.grupos[0].abas.unshift('resumo');
+
+  function tileX(rotulo, valor, nota, cls) {
+    return h('div', { class: 'pb-card' }, h('span', { class: 'pb-label' }, rotulo), h('span', { class: 'pb-big ' + (cls || '') }, valor), nota ? h('span', { class: 'pb-note' }, nota) : null);
+  }
+  function chipSinal(s) {
+    var c = h('span', { class: 'inv-chip nd', style: 'color:' + PB.sinalColor(s) }, PB.sinalName(s));
+    return c;
+  }
+  var ATENCAO = ['armadilha', 'risco-rendimento', 'oportunidade-com-risco'];
+
+  function desenharResumo() {
+    var ativos = dash.data('ativos'), macro = dash.data('macro'), par = dash.data('parametros');
+    var ok = ativos.status === 'ok' && macro.status === 'ok' && par.status === 'ok';
+    if (!ok) {
+      var falhou = [ativos, macro, par].some(function (x) { return x.status === 'error'; });
+      pagina.replaceChildren(h('div', { class: 'pb-card', 'aria-live': 'polite' }, h('p', { class: 'pb-note' }, falhou ? 'Não foi possível carregar os dados do mercado. Verifique a conexão e tente de novo.' : 'Carregando os dados…')));
+      return;
+    }
+    var p = par.data[0], A = ativos.data;
+    var m = function (ind) { var r = macro.data.filter(function (x) { return x.indicador === ind; })[0]; return r && typeof r.valor_num === 'number' ? r.valor_num : null; };
+    var mg = dash.data('margem_positiva'), sn = dash.data('sinais');
+    var nMs = mg.status === 'ok' ? mg.data[0].n : null, tkMs = mg.status === 'ok' ? mg.data[0].tickers : '';
+
+    var frase = h('div', { class: 'pb-card' },
+      h('h2', null, 'O essencial de hoje'),
+      h('p', { class: 'pb-text' }, nMs === null ? 'Dados de valor justo indisponíveis.' :
+        'Com custo de capital de ' + num(p.ke, 1) + '%, só ' + nMs + (nMs === 1 ? ' ação está' : ' ações estão') + ' abaixo do valor justo' + (tkMs ? ' (' + tkMs + ')' : '') + '.'),
+      h('p', { class: 'pb-note' }, 'Versão ' + p.versao + ' · preços de ' + dt(p.data_ref) + ' · evento de estresse: ' + p.evento + '.'));
+
+    var tiles = h('div', { class: 'pb-tiles' },
+      tileX('Ibovespa no estresse', num(m('Ibovespa variação'), 2) + '%', 'de ' + dt(p.data_pre_estresse) + ' a ' + dt(p.data_estresse)),
+      tileX('Selic meta', num(m('Selic meta'), 2) + '%', 'Focus fim de 2026: ' + num(m('Focus Selic fim 2026'), 2) + '%'),
+      tileX('Dólar', 'R$ ' + num(m('Dólar comercial fechamento'), 2), 'variação no dia: ' + num(m('Dólar variação dia'), 2) + '% (as fontes divergem)'),
+      tileX('DI jan/31', num(m('DI jan/31'), 2) + '%', 'antes: ' + num(m('DI jan/31 ajuste anterior'), 2) + '%'));
+
+    var top = A.slice().sort(function (a, b) { return a.posicao - b.posicao; }).slice(0, 3);
+    var cTop = h('div', { class: 'pb-card' },
+      h('h2', null, 'Os 3 primeiros do score'),
+      h('p', { class: 'pb-note' }, 'Score de 0 a 1000 (desconto, solidez, qualidade e proventos). É uma classificação do dia, não uma promessa de retorno.'),
+      h('ol', { class: 'inv-resumo-lista' }, top.map(function (a) {
+        return h('li', null,
+          h('div', { class: 'l' }, h('b', null, a.posicao + 'º ' + a.ticker), h('span', null, a.nome), chipSinal(a.sinal), h('span', { class: 'pb-note' }, num(a.score, 0) + ' pontos · confiança ' + String(a.confianca || '—').toLowerCase())),
+          h('span', { class: 'pb-text' }, a.tese),
+          h('span', { class: 'm' }, 'Risco: ' + (a.risco || '—')),
+          h('div', null, h('button', { type: 'button', class: 'pb-btn', onclick: function () { PB.openAtivo(a.ticker); } }, 'Abrir ficha de ' + a.ticker)));
+      })));
+
+    var att = A.filter(function (a) { return ATENCAO.indexOf(a.sinal) >= 0; }).sort(function (a, b) { return ATENCAO.indexOf(a.sinal) - ATENCAO.indexOf(b.sinal) || a.posicao - b.posicao; });
+    var cAtt = h('div', { class: 'pb-card' },
+      h('h2', null, 'Precisam de atenção'),
+      h('p', { class: 'pb-note' }, 'Ativos que parecem baratos ou rendem bem, mas têm um risco que muda a conta. ' + att.length + ' de ' + A.length + '.'),
+      att.length ? h('ul', { class: 'inv-resumo-lista' }, att.map(function (a) {
+        return h('li', null,
+          h('div', { class: 'l' }, h('b', null, a.ticker), chipSinal(a.sinal), h('button', { type: 'button', class: 'pb-btn', onclick: function () { PB.openAtivo(a.ticker); } }, 'Ver ficha')),
+          h('span', { class: 'm' }, a.risco || a.tese || ''));
+      })) : h('p', { class: 'pb-note' }, 'Nenhum ativo com alerta neste momento.'));
+
+    var cCart = h('div', { class: 'pb-card', id: 'resumo-carteira' });
+    var cd = null;
+    try { cd = typeof INV.carteiraDados === 'function' ? INV.carteiraDados() : null; } catch (e) { cd = null; }
+    var vals = cd ? cd.aloc.linhas.filter(function (l) { return l.valorCent > 0; }).map(function (l) { return l.valorCent; }) : [];
+    cCart.append(h('h2', null, 'Sua carteira'));
+    if (vals.length) {
+      var total = 0; cd.aloc.linhas.forEach(function (l) { total += l.valorCent || 0; });
+      cCart.append(
+        h('p', { class: 'pb-text' }, 'Posições a preço de mercado: ' + C.fmtBRL(total) + ' em ' + vals.length + (vals.length === 1 ? ' ativo.' : ' ativos.')),
+        cartaoConcentracaoCorpo(C.concentracao(vals)),
+        cd.aloc.semPreco && cd.aloc.semPreco.length ? h('p', { class: 'pb-note warn' }, 'Sem preço para: ' + cd.aloc.semPreco.join(', ') + '. Esses ativos ficaram fora da conta.') : document.createDocumentFragment(),
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { INV.ir('corretora', 'posicoes'); } }, 'Ver posições e alvos')));
+    } else {
+      cCart.append(h('p', { class: 'pb-note' }, 'Você ainda não registrou posições. Registre o que tem para ver a concentração e planejar aportes.'),
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { INV.ir('corretora', 'resumo'); } }, 'Ir para Minha carteira')));
+    }
+
+    var cMais = h('div', { class: 'pb-card' },
+      h('h2', null, 'Quer ir mais fundo?'),
+      h('p', { class: 'pb-note' }, 'O modo Avançado mostra os mesmos números com o cálculo, o histórico, o cenário macro completo e as premissas. Nada do que você registrou ou escolheu se perde ao trocar.'),
+      h('div', { class: 'inv-actions' },
+        h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: function () { irAvancado('geral'); } }, 'Abrir a análise completa'),
+        h('button', { type: 'button', class: 'pb-btn', onclick: function () { irAvancado('metodo'); } }, 'Como o score é calculado')),
+      h('p', { class: 'pb-disc' }, 'Material educacional; não é recomendação de investimento. Resultados passados não garantem resultados futuros. Os dados dependem das fontes e da data da coleta.'));
+
+    pagina.replaceChildren(frase, tiles, cTop, cAtt, cCart, cMais);
+  }
+  INV.aoMostrar('resumo', desenharResumo);
+  if (W.dash && dash.onData) dash.onData(function () { if (PB.current === 'resumo') desenharResumo(); });
+
+  /* ---------- cartões de risco: um cálculo, duas apresentações ---------- */
+  var SINAL_NIVEL = { baixo: 'Baixo', moderado: 'Moderado', alto: 'Alto', baixa: 'Baixa', moderada: 'Moderada', alta: 'Alta', 'muito alta': 'Muito alta' };
+  function chipNivel(n, prefixo) {
+    var k = n ? String(n).replace(' ', '-') : 'nd';
+    return h('span', { class: 'inv-chip ' + k }, (prefixo ? prefixo + ': ' : '') + (n ? SINAL_NIVEL[n] : 'sem dados'));
+  }
+  function frasesConcentracao(c) {
+    if (!c) return 'Sem posições com preço para medir a concentração.';
+    if (c.n === 1) return 'Todo o valor está em um único ativo: a carteira depende só dele.';
+    return 'Os 3 maiores ativos somam ' + num(c.top3Pct, 0) + '% da carteira e o maior sozinho pesa ' + num(c.maiorPct, 0) + '%. É como se a carteira tivesse ' + num(c.nEfetivo, 1) + ' ativos de peso igual.';
+  }
+  // corpo da concentração (chip + frase fácil + detalhe avançado). Também usado no Resumo e na Minha carteira.
+  function cartaoConcentracaoCorpo(c) {
+    var box = h('div', { class: 'inv-risco' });
+    box.append(h('div', { class: 'inv-risco-linha' }, chipNivel(c && c.nivel, 'Concentração'), h('span', { class: 'pb-text' }, frasesConcentracao(c))));
+    if (c) {
+      var L = C.LIMITES_RISCO.hhi;
+      box.append(h('div', { 'data-so-avancado': '1', class: 'inv-risco' },
+        h('h3', null, 'Como a concentração é calculada'),
+        h('div', { class: 'pb-tablewrap' }, h('table', { class: 'pb-table' }, h('caption', { class: 'inv-sr' }, 'Indicadores de concentração'),
+          h('tbody', null,
+            linhaTab('Ativos com saldo', String(c.n)), linhaTab('Maior posição', num(c.maiorPct, 1) + '%'), linhaTab('3 maiores somados', num(c.top3Pct, 1) + '%'),
+            linhaTab('HHI (índice de Herfindahl-Hirschman)', num(c.hhi, 0) + ' de 10.000'), linhaTab('Número efetivo de ativos (10.000 ÷ HHI)', num(c.nEfetivo, 2))))),
+        h('p', { class: 'pb-note' }, 'HHI = soma dos quadrados dos pesos em % (cada peso = valor de mercado do ativo ÷ total das posições). Faixas: abaixo de ' + L[0] + ' baixa; até ' + L[1] + ' moderada; até ' + L[2] + ' alta; acima, muito alta. As faixas são orientativas e não consideram setor nem correlação entre os ativos.')));
+    }
+    return box;
+  }
+  function linhaTab(a, b) { return h('tr', null, h('th', { scope: 'row', style: 'text-align:left;font-weight:400' }, a), h('td', { style: 'text-align:right' }, b)); }
+  function cartaoConcentracao(c, titulo) {
+    return h('div', { class: 'pb-card' }, h('h2', null, titulo || 'Concentração da carteira'), cartaoConcentracaoCorpo(c));
+  }
+
+  // risco histórico de uma série. bench = { IBOV: riscoSerie, CDI: riscoSerie } (opcional).
+  function cartaoRisco(r, opts) {
+    opts = opts || {};
+    var bench = opts.bench || {}, ib = bench.IBOV || null;
+    var card = h('div', { class: 'pb-card inv-risco', id: opts.id || null });
+    card.append(h('h2', null, opts.titulo || 'Risco no período'));
+    if (!r || !r.drawdown) { card.append(h('p', { class: 'pb-note' }, 'Dados insuficientes para medir o risco.'), avisosRisco(r)); return card; }
+    var dd = r.drawdown, vol = r.volAnualPct;
+    card.append(h('div', { class: 'inv-risco-linha' }, chipNivel(r.nivel, 'Risco histórico'), opts.concentracao ? chipNivel(opts.concentracao.nivel, 'Concentração') : null));
+    var f = [];
+    f.push('No período, a carteira chegou a cair ' + num(-dd.maxPct, 1) + '% do ponto mais alto até o mais baixo (de ' + dt(dd.dataPico) + ' a ' + dt(dd.dataVale) + ').');
+    f.push(dd.emQueda ? 'No fim do período, estava ' + num(-dd.atualPct, 1) + '% abaixo do último pico.' : 'No fim do período, estava no seu ponto mais alto.');
+    f.push(vol === null ? 'Há poucos dados para medir a oscilação.' : 'O valor oscilou cerca de ' + num(vol, 1) + '% ao ano.');
+    if (ib && ib.drawdown && ib.volAnualPct !== null && vol !== null) f.push('Para comparar, o Ibovespa caiu no máximo ' + num(-ib.drawdown.maxPct, 1) + '% e oscilou ' + num(ib.volAnualPct, 1) + '% ao ano no mesmo período.');
+    card.append(h('p', { class: 'pb-text' }, f.join(' ')));
+    if (opts.concentracao) card.append(h('p', { class: 'pb-text' }, frasesConcentracao(opts.concentracao)));
+    card.append(avisosRisco(r));
+
+    // detalhe do Avançado: os mesmos números, com o cálculo
+    var cols = [['Carteira', r]]; if (bench.IBOV) cols.push(['Ibovespa', bench.IBOV]); if (bench.CDI) cols.push(['CDI', bench.CDI]);
+    var linhas = [
+      ['Volatilidade anualizada', function (x) { return x.volAnualPct === null ? '—' : num(x.volAnualPct, 2) + '%'; }],
+      ['Queda máxima (drawdown)', function (x) { return x.drawdown ? num(x.drawdown.maxPct, 2) + '%' : '—'; }],
+      ['Pico → vale', function (x) { return x.drawdown && x.drawdown.maxPct < 0 ? dt(x.drawdown.dataPico) + ' → ' + dt(x.drawdown.dataVale) + ' (' + x.drawdown.diasPicoAVale + ' dias)' : '—'; }],
+      ['Queda atual desde o pico', function (x) { return x.drawdown ? num(x.drawdown.atualPct, 2) + '%' : '—'; }],
+      ['Pior retorno em um dia', function (x) { return x.piorDiaPct === null ? '—' : num(x.piorDiaPct, 2) + '%'; }],
+      ['Observações (dias com retorno)', function (x) { return String(x.observacoes); }]
+    ];
+    var thead = h('thead', null, h('tr', null, h('th', { scope: 'col', style: 'text-align:left' }, 'Medida'), cols.map(function (c) { return h('th', { scope: 'col', style: 'text-align:right' }, c[0]); })));
+    var tbody = h('tbody', null, linhas.map(function (l) { return h('tr', null, h('th', { scope: 'row', style: 'text-align:left;font-weight:400' }, l[0]), cols.map(function (c) { return h('td', { style: 'text-align:right' }, l[1](c[1])); })); }));
+    var Lm = C.LIMITES_RISCO;
+    card.append(h('div', { 'data-so-avancado': '1', class: 'inv-risco' },
+      h('h3', null, 'Números, fórmulas e limites'),
+      h('div', { class: 'pb-tablewrap', tabindex: '0', role: 'region', 'aria-label': 'Medidas de risco' }, h('table', { class: 'pb-table' }, h('caption', { class: 'inv-sr' }, 'Medidas de risco da carteira e dos benchmarks'), thead, tbody)),
+      h('ul', null,
+        h('li', null, 'Retorno do dia = (valor − aporte do dia) ÷ valor do dia anterior − 1. É a mesma convenção do TWR: aportes não contam como ganho nem como perda.'),
+        h('li', null, 'Volatilidade anualizada = desvio padrão amostral (n − 1) dos retornos diários × √252. Com menos de 20 observações não é calculada.'),
+        h('li', null, 'Queda máxima = menor valor de (índice ÷ maior índice anterior − 1), com o índice formado pelos retornos acima.'),
+        h('li', null, 'Nível de risco: o pior entre a volatilidade (baixo abaixo de ' + Lm.vol[0] + '% a.a.; moderado até ' + Lm.vol[1] + '%; alto acima) e a queda máxima (baixo até ' + Lm.dd[0] + '%; moderado até ' + Lm.dd[1] + '%; alto acima).'),
+        h('li', null, 'Os limites são orientativos, adaptados das faixas de risco do repositório tradermonty/claude-trading-skills (licença MIT, pensadas para o mercado dos EUA). Não são regra do mercado nem recomendação.'),
+        h('li', null, 'O CDI quase não oscila, por isso serve de referência de risco mínimo e não de comparação de volatilidade.'))));
+    return card;
+  }
+  function avisosRisco(r) {
+    // avisos e limitações aparecem nos dois modos, sem exceção
+    var a = r && r.avisos ? r.avisos : ['Risco medido no passado; não prevê perdas futuras.'];
+    return h('ul', { 'aria-label': 'Limitações da medida de risco' }, a.map(function (x) { return h('li', null, x); }));
+  }
+
+  /* ---------- interface pública ---------- */
+  W.INVModo = {
+    atual: function () { return modo; },
+    definir: definir,
+    irAvancado: irAvancado,
+    aoMudar: function (fn) { ouvintes.push(fn); },
+    cartaoRisco: cartaoRisco,
+    cartaoConcentracao: cartaoConcentracao,
+    // atributos para marcar elementos de outros módulos
+    soAvancado: function (n) { if (n && n.setAttribute) n.setAttribute('data-so-avancado', '1'); return n; },
+    soFacil: function (n) { if (n && n.setAttribute) n.setAttribute('data-so-facil', '1'); return n; },
+    _tabs: { avancado: TABS_AV, facil: TABS_FACIL, secoes: SECOES_AV }
+  };
+
+  /* ---------- sinais de navegação ---------- */
+  // link ou ação que leva a uma tela só do Avançado enquanto estamos no Fácil: abre no Avançado (e avisa)
+  function guardar() {
+    var t = PB.current, sc = secaoAtual(t);
+    if (modo === 'facil' && (TABS_AV.indexOf(t) >= 0 || (sc && secaoOculta(t, sc, 'facil')))) {
+      modo = 'avancado';
+      aplicar(false, false);
+      anuncio.textContent = 'Esta tela é do modo Avançado; ele foi ativado. Use o botão Fácil para voltar.';
+    }
+  }
+  new MutationObserver(function () { guardar(); }).observe(nav, { subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
+  if (typeof INV.on === 'function') INV.on('secao', guardar);
+
+  // arranque: link direto para tela do Avançado abre no Avançado; sem destino, o Fácil abre no Resumo
+  document.documentElement.setAttribute('data-modo', modo);
+  var destino = (location.hash || '').replace('#', '').split('/')[0];
+  var semDestino = destino === '' || destino === 'geral' || destino === 'resumo';
+  if (modo === 'facil' && !semDestino && TABS_AV.indexOf(PB.current) >= 0) modo = 'avancado';
+  if (semDestino) PB.show(modo === 'facil' ? 'resumo' : 'geral');
+  aplicar(false, false);
+  // módulos anteriores já desenharam sem o INVModo: redesenha uma vez para incluir os cartões de risco
+  try { PB.redraw(); } catch (e) { /* ok */ }
+})();
