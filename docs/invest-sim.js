@@ -184,6 +184,9 @@
   }
 
   /* ---------- montagem ---------- */
+  // marcas de modo: só mudam a apresentação; os valores digitados e os cálculos são os mesmos nos dois modos
+  function soAv(n) { return window.INVModo ? window.INVModo.soAvancado(n) : n; }
+  function soFacil(n) { return window.INVModo ? window.INVModo.soFacil(n) : n; }
   var root = INV.aba({ id: 'simulacao', rotulo: 'Simulador' });
   if (!root) return;
   root.classList.add('inv-sim');
@@ -236,18 +239,18 @@
       h('div', { class: 'inv-sim-grid' },
         campo('ini', 'Aporte inicial (R$)', S.ini, null, null, function (v) { S.ini = v; }),
         campo('mensal', 'Aporte mensal (R$)', S.mensal, null, null, function (v) { S.mensal = v; }),
-        campo('dia', 'Dia do aporte mensal (1 a 28)', S.dia, 'Compra no 1º pregão em ou depois desse dia.', { inputmode: 'numeric' }, function (v) { S.dia = v; })),
+        soAv(campo('dia', 'Dia do aporte mensal (1 a 28)', S.dia, 'Compra no 1º pregão em ou depois desse dia.', { inputmode: 'numeric' }, function (v) { S.dia = v; }))),
       blocoPeriodo(),
-      h('div', { class: 'inv-sim-grid' },
+      soAv(h('div', { class: 'inv-sim-grid' },
         seletor('estrategia', 'Estratégia', [['pesos', 'Análise histórica: pesos fixos'], ['rebalancear-aportes', 'Estratégia: aporte no que está abaixo do peso']], S.estrategia,
           null, function (v) { S.estrategia = v; atualizarAvisoEstrategia(); }),
         seletor('dividendos', 'Dividendos', [['reinvestir', 'Reinvestir no mesmo ativo'], ['caixa', 'Acumular em caixa (sem rendimento)'], ['ignorar', 'Ignorar (só retorno de preço)']], S.dividendos,
           null, function (v) { S.dividendos = v; }),
-        campo('custo', 'Custo por compra (%)', S.custo, 'Descontado do valor de cada compra.', null, function (v) { S.custo = v; })),
-      elEstEstrategia = h('p', { class: 'pb-note', id: 'sim-estrategia-aviso' }),
-      h('div', { class: 'pb-controls' },
+        campo('custo', 'Custo por compra (%)', S.custo, 'Descontado do valor de cada compra.', null, function (v) { S.custo = v; }))),
+      soAv(elEstEstrategia = h('p', { class: 'pb-note', id: 'sim-estrategia-aviso' })),
+      soAv(h('div', { class: 'pb-controls' },
         h('label', { class: 'inv-sim-opt' }, h('input', { type: 'checkbox', id: 'sim-inteiros', checked: S.inteiros, onchange: function (e) { S.inteiros = e.target.checked; agendarSalvar(); } }),
-          h('span', null, 'Comprar só unidades inteiras (o troco fica em caixa até o próximo aporte)'))),
+          h('span', null, 'Comprar só unidades inteiras (o troco fica em caixa até o próximo aporte)')))),
       h('fieldset', null, h('legend', null, 'Comparar com'),
         h('div', { class: 'pb-controls' },
           h('label', { class: 'inv-sim-opt' }, h('input', { type: 'checkbox', id: 'sim-bibov', checked: S.bibov, onchange: function (e) { S.bibov = e.target.checked; agendarSalvar(); } }), h('span', null, 'Ibovespa (retorno total)')),
@@ -467,7 +470,7 @@
     setTimeout(function () {
       try {
         var r = CALC.simular(p);
-        R = { r: r, notas: notas, estrategia: S.estrategia, tickers: S.sel.slice(), bench: { ibov: !!ibov, cdi: !!cdi } };
+        R = { r: r, p: p, notas: notas, estrategia: S.estrategia, tickers: S.sel.slice(), bench: { ibov: !!ibov, cdi: !!cdi } };
         secs.mostrar('resultado');
         mostrar();
         elStatus.className = 'pb-note pos';
@@ -501,22 +504,32 @@
   function mostrar() {
     var r = R.r, s = r.resumo, ia = r.benchmarks || {};
     var tiles = h('div', { class: 'pb-tiles' },
-      tile('Aporte inicial', money(s.inicial)),
-      tile('Aportes adicionais', money(s.aportesAdicionais), r.aportes ? r.aportes.length + ' registros de aporte' : null),
+      soAv(tile('Aporte inicial', money(s.inicial))),
+      soAv(tile('Aportes adicionais', money(s.aportesAdicionais), r.aportes ? r.aportes.length + ' registros de aporte' : null)),
       tile('Total investido', money(s.totalInvestido)),
       tile('Valor final', money(s.valorFinal), 'em ' + fmtData(r.fimEfetivo)),
       tile(s.lucro < 0 ? 'Prejuízo' : 'Lucro', money(s.lucro), null, sgn(s.lucro)),
       tile('Retorno acumulado', pct(s.retornoAcumulado), 'lucro ÷ total investido', sgn(s.retornoAcumulado)),
       tile('TWR (retorno da carteira)', pct(s.twr), s.twrAnual !== null && s.twrAnual !== undefined ? pctPlain(s.twrAnual) + ' ao ano' : 'anualizado só para períodos de 1 ano ou mais', sgn(s.twr)),
-      tile('XIRR (retorno dos seus aportes)', s.xirr !== null && s.xirr !== undefined ? pctPlain(s.xirr) + ' a.a.' : '—', s.xirr === null || s.xirr === undefined ? 'não calculável neste caso' : 'considera as datas dos aportes', sgn(s.xirr)),
-      tile('IPCA no período', s.ipcaAcum !== null && s.ipcaAcum !== undefined ? pct(s.ipcaAcum) : '—', s.ipcaAcum === null || s.ipcaAcum === undefined ? 'série de IPCA indisponível' : null),
+      soAv(tile('XIRR (retorno dos seus aportes)', s.xirr !== null && s.xirr !== undefined ? pctPlain(s.xirr) + ' a.a.' : '—', s.xirr === null || s.xirr === undefined ? 'não calculável neste caso' : 'considera as datas dos aportes', sgn(s.xirr))),
+      soAv(tile('IPCA no período', s.ipcaAcum !== null && s.ipcaAcum !== undefined ? pct(s.ipcaAcum) : '—', s.ipcaAcum === null || s.ipcaAcum === undefined ? 'série de IPCA indisponível' : null)),
       tile('Retorno real (TWR descontado o IPCA)', s.twrReal !== null && s.twrReal !== undefined ? pct(s.twrReal) : '—',
         s.valorFinalReal !== null && s.valorFinalReal !== undefined ? 'valor final em reais do início: ' + money(s.valorFinalReal) : null, sgn(s.twrReal)));
 
     var cardRes = h('div', { class: 'pb-card' },
       h('h2', null, 'Resultado'),
       h('p', { class: 'pb-note' }, 'Período efetivo: ' + fmtData(r.inicioEfetivo) + ' a ' + fmtData(r.fimEfetivo) + (s.dias ? ' (' + PB.f0.format(s.dias) + ' dias corridos)' : '') + '. Dividendos recebidos: ' + money(s.dividendos) + '; custos: ' + money(s.custos) + '.'),
+      soFacil(h('p', { class: 'pb-note' }, 'Premissas em uso: ' + (R.p.dividendos === 'reinvestir' ? 'dividendos reinvestidos' : R.p.dividendos === 'caixa' ? 'dividendos em caixa' : 'sem dividendos') +
+        '; custo de ' + PB.num(R.p.custoPct || 0, 2) + '% por compra; ' + (R.estrategia === 'pesos' ? 'pesos fixos' : 'aporte no que está abaixo do peso') + (R.p.inteiros ? '; só unidades inteiras' : '') +
+        '. Sem imposto de renda, custódia ou come-cotas; dividendos brutos. Para ver todas as premissas ou mudá-las, use o modo Avançado.')),
       tiles);
+
+    // risco: o mesmo cálculo (INVCalc.riscoSerie) alimenta a frase do modo Fácil e a tabela do Avançado
+    var rkB = {};
+    if (ia.IBOV && ia.IBOV.linhas) rkB.IBOV = CALC.riscoSerie(ia.IBOV.linhas);
+    if (ia.CDI && ia.CDI.linhas) rkB.CDI = CALC.riscoSerie(ia.CDI.linhas);
+    var concSim = CALC.concentracao((r.porAtivo || []).map(function (a) { return a.valorFinal; }));
+    var cardRisco = window.INVModo ? window.INVModo.cartaoRisco(CALC.riscoSerie(r.linhas), { id: 'sim-risco', titulo: 'Risco no período simulado', bench: rkB, concentracao: concSim }) : null;
 
     var legenda = h('div', { class: 'pb-legend', id: 'sim-legend' });
     var chartBox = h('div', { class: 'pb-chart', id: 'sim-chart', style: 'height:300px', role: 'img',
@@ -529,8 +542,8 @@
         a.contribuicaoPct === null || a.contribuicaoPct === undefined ? '—' : { v: pct(a.contribuicaoPct, 1), c: sgn(a.contribuicaoPct) },
         { v: pct(a.retornoPrecoPct), c: sgn(a.retornoPrecoPct) }];
     });
-    var cardAt = h('div', { class: 'pb-card' }, h('h2', null, 'Por ativo'), tabela(cols1, linhas1, 'Resultado por ativo'),
-      h('p', { class: 'pb-note' }, 'Comprado: inclui dividendos reinvestidos e caixa reaplicado; o total investido está no resumo. Retorno de preço = variação do fechamento entre o início e o fim efetivos, sem dividendos.'));
+    var cardAt = soAv(h('div', { class: 'pb-card' }, h('h2', null, 'Por ativo'), tabela(cols1, linhas1, 'Resultado por ativo'),
+      h('p', { class: 'pb-note' }, 'Comprado: inclui dividendos reinvestidos e caixa reaplicado; o total investido está no resumo. Retorno de preço = variação do fechamento entre o início e o fim efetivos, sem dividendos.')));
 
     var cols2 = [{ t: 'Comparação', l: true }, { t: 'Valor final' }, { t: 'Lucro' }, { t: 'Retorno s/ investido' }, { t: 'TWR', sm: true }, { t: 'XIRR a.a.', sm: true }];
     var linhas2 = [[{ v: 'Sua carteira simulada', c: '' }, money(s.valorFinal), { v: money(s.lucro), c: sgn(s.lucro) }, { v: pct(s.retornoAcumulado), c: sgn(s.retornoAcumulado) }, pct(s.twr), s.xirr === null || s.xirr === undefined ? '—' : pctPlain(s.xirr)]];
@@ -547,11 +560,11 @@
     var cardPrem = h('div', { class: 'pb-card' }, h('h2', null, 'Premissas e avisos'),
       R.estrategia === 'pesos' ? aviso('Viés de retrospectiva: os pesos foram escolhidos hoje, conhecendo o passado. Isso torna o resultado mais favorável do que seria numa decisão tomada na época.', 'warn') : null,
       avisos.map(function (a) { return aviso(a, 'warn'); }),
-      (r.premissas && r.premissas.length) ? h('ul', { class: 'inv-sim-ul' }, r.premissas.map(function (p) { return h('li', null, p); })) : null,
+      (r.premissas && r.premissas.length) ? soAv(h('ul', { class: 'inv-sim-ul' }, r.premissas.map(function (p) { return h('li', null, p); }))) : null,
       h('p', { class: 'pb-disc' }, 'Resultado histórico simulado. Não garante resultado futuro. Material educacional; não é recomendação de investimento.'));
 
     var voltar = h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { secs.mostrar('montar'); } }, 'Alterar a carteira'));
-    res.replaceChildren(cardRes, cardGraf, cardAt, cardBm, cardPrem, voltar);
+    res.replaceChildren.apply(res, [cardRes, cardRisco, cardGraf, cardAt, cardBm, cardPrem, voltar].filter(Boolean));
     desenharGrafico();
   }
 

@@ -693,3 +693,80 @@ test('planejarAportes: ativo sem preço abaixo da meta não trava os lotes extra
   assert.equal(by.C.qtd, 9);  // 8 un (R$ 240) + 1 lote = R$ 270 ≤ R$ 250 + R$ 30
   assert.equal(r.sobraCent, 100000 - 26000 - 27000);
 });
+
+// ======================================================================= risco e concentração
+// Valores de referência calculados à parte em Python (statistics.stdev, produtos acumulados), sem usar este código.
+const mkLinhas = (vals, flx = {}) => vals.map((valor, i) => ({ data: new Date(Date.UTC(2024, 0, 1 + i)).toISOString().slice(0, 10), valor, fluxo: flx[i] || 0 }));
+
+test('concentracao: exemplo de 5 posições (30/25/20/15/10) dá HHI 2250', () => {
+  const c = C.concentracao([30, 25, 20, 15, 10]);
+  near(c.hhi, 2250, 1e-9); near(c.nEfetivo, 10000 / 2250, 1e-9);
+  near(c.maiorPct, 30); near(c.top3Pct, 75); assert.equal(c.n, 5); assert.equal(c.nivel, 'alta');
+});
+test('concentracao: normaliza valores em R$, ignora zeros/negativos e trata vazio e ativo único', () => {
+  near(C.concentracao([300, 250, 200, 150, 100, 0, -5, NaN]).hhi, 2250, 1e-9);
+  const u = C.concentracao([1000]); near(u.hhi, 10000); near(u.nEfetivo, 1); assert.equal(u.nivel, 'muito alta');
+  assert.equal(C.concentracao([]), null); assert.equal(C.concentracao([0, 0]), null); assert.equal(C.concentracao(null), null);
+  const ig = C.concentracao(new Array(20).fill(5)); near(ig.hhi, 500); near(ig.nEfetivo, 20); assert.equal(ig.nivel, 'baixa');
+});
+test('drawdown: série de referência (pico 1,10 → vale 0,90 = −18,18%; atual −5%)', () => {
+  const d = C.drawdown(mkLinhas([100, 110, 99, 105, 90, 95, 120, 114]));
+  near(d.maxPct, -18.181818181818187, 1e-9); near(d.atualPct, -5.000000000000004, 1e-9);
+  assert.equal(d.dataPico, '2024-01-02'); assert.equal(d.dataVale, '2024-01-05'); assert.equal(d.emQueda, true); assert.equal(d.diasPicoAVale, 3);
+});
+test('drawdown: só sobe = 0; aporte não conta como retorno', () => {
+  assert.equal(C.drawdown(mkLinhas([100, 101, 102])).maxPct, 0);
+  // 1000 → 1100 (+10%) → aporte de 500 e queda de 10% sobre 1600 base: (1100+500)*0.9 = 1440
+  const d = C.drawdown(mkLinhas([1000, 1100, 1440], { 2: 500 }));
+  near(d.maxPct, ((1440 - 500) / 1100 - 1) * 100, 1e-9);          // −14,545…%
+  // sem a neutralização o valor subiria (1100 → 1440) e o drawdown seria 0: o teste pega esse erro
+  assert.ok(d.maxPct < -14);
+});
+test('drawdown: poucos pontos e série com zero', () => {
+  assert.equal(C.drawdown([]), null); assert.equal(C.drawdown([{ data: '2024-01-01', valor: 1 }]), null);
+  assert.doesNotThrow(() => C.drawdown(mkLinhas([0, 0, 10, 9])));
+});
+test('volatilidadeAnual: 30 retornos de referência = 29,4342%; menos de 20 observações = null', () => {
+  const rr = [-0.0219, 0.0208, 0.0158, -0.0147, -0.0003, -0.003, 0.0091, 0.0173, -0.0244, -0.0283, 0.0201, -0.004, 0.0157, -0.0299, -0.0033, 0.0133, -0.0163, 0.0267, 0.0241, -0.0282, -0.0285, 0.0025, 0.0263, -0.0071, -0.017, -0.0047, -0.0283, -0.0167, -0.0037, -0.0003];
+  near(C.volatilidadeAnual(rr), 29.434191448159343, 1e-9);
+  near(C.volatilidadeAnual(rr, 12), 29.434191448159343 * Math.sqrt(12 / 252), 1e-9);
+  assert.equal(C.volatilidadeAnual(rr.slice(0, 19)), null); assert.equal(C.volatilidadeAnual([]), null); assert.equal(C.volatilidadeAnual(null), null);
+  near(C.volatilidadeAnual(new Array(25).fill(0.01)), 0, 1e-12);       // retorno constante: sem dispersão
+});
+test('retornosLinhas segue a convenção do TWR (composição dos retornos = twr)', () => {
+  const l = mkLinhas([1000, 1100, 1700, 1600], { 2: 500, 3: 0 });
+  const r = C.retornosLinhas(l);
+  let g = 1; r.forEach((x) => { g *= 1 + x; });
+  near(g - 1, C.twr(l), 1e-12);
+});
+test('riscoSerie: série curta avisa, sem volatilidade e sem nível; série longa classifica', () => {
+  const curta = C.riscoSerie(mkLinhas([100, 101, 99, 100]));
+  assert.equal(curta.volAnualPct, null); assert.equal(curta.nivel, null);
+  assert.ok(curta.avisos.some((a) => /observações/.test(a)));
+  assert.ok(curta.avisos.some((a) => /passado/.test(a)));          // o aviso de limitação nunca some
+  const vals = [100]; for (let i = 1; i <= 60; i++) vals.push(vals[i - 1] * (i % 2 ? 1.03 : 0.97));
+  const longa = C.riscoSerie(mkLinhas(vals));
+  assert.ok(longa.volAnualPct > 25); assert.equal(longa.nivel, 'alto'); assert.equal(longa.observacoes, 60);
+  assert.equal(C.riscoSerie(null).nivel, null);
+});
+
+test('risco × simulação: retornos de riscoSerie recompõem o TWR da carteira e dos benchmarks (mesma série nos dois modos)', () => {
+  const d = dias('2024-01-01', 150);
+  const c = d.map((_, i) => 10 * (1 + 0.1 * Math.sin(i / 7)) + i * 0.01);
+  const ib = { d, c: c.map((x) => x * 10) };                          // série de índice
+  const cdi = { d, v: d.map(() => 0.04) };                            // 0,04% ao dia
+  const r = C.simular(simBase({
+    series: { AAAA3: { d, c, div: [] } }, pesos: { AAAA3: 100 }, inicio: d[0], fim: d[d.length - 1],
+    aporteMensal: 300, diaAporte: 10, ibov: ib, cdi,
+  }));
+  const comp = (linhas) => C.retornosLinhas(linhas).reduce((g, x) => g * (1 + x), 1) - 1;
+  near(comp(r.linhas) * 100, r.resumo.twr, 1e-9, 'carteira');
+  assert.ok(r.benchmarks.IBOV && r.benchmarks.CDI);
+  near(comp(r.benchmarks.IBOV.linhas) * 100, r.benchmarks.IBOV.twr, 1e-9, 'ibov');
+  near(comp(r.benchmarks.CDI.linhas) * 100, r.benchmarks.CDI.twr, 1e-9, 'cdi');
+  const k = C.riscoSerie(r.linhas);
+  assert.ok(k.drawdown.maxPct <= 0 && k.drawdown.maxPct > -100);
+  assert.equal(k.observacoes, r.linhas.length - 1);
+  // CDI acumulado só sobe: sem queda
+  assert.equal(C.riscoSerie(r.benchmarks.CDI.linhas).drawdown.maxPct, 0);
+});

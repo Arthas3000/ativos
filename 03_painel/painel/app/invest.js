@@ -742,7 +742,7 @@
       }
       var porAtivo = {}, v = cx;
       tickers.forEach(function (t) { porAtivo[t] = un[t] * precos[t]; v += porAtivo[t]; });
-      linhas.push({ data: data, investido: investido, valor: v, caixa: cx, porAtivo: porAtivo });
+      linhas.push({ data: data, investido: investido, valor: v, fluxo: fluxo, caixa: cx, porAtivo: porAtivo });
       twrL.push({ valor: v, fluxo: fluxo });
       anterior = data;
     });
@@ -821,7 +821,7 @@
       datas.forEach(function (d) {
         var pr = ci(d), f = apPorData[d] || 0;
         if (f > 0) u += f / pr;
-        linI.push({ data: d, valor: u * pr });
+        linI.push({ data: d, valor: u * pr, fluxo: f });
         flI.push({ valor: u * pr, fluxo: f });
       });
       benchmarks.IBOV = resumoBench(linI, flI);
@@ -839,7 +839,7 @@
         if (ant !== null) { while (j < cd.length && cd[j] <= d) { B *= 1 + cv[j] / 100; j++; } }
         var f = apPorData[d] || 0;
         B += f;
-        linC.push({ data: d, valor: B });
+        linC.push({ data: d, valor: B, fluxo: f });
         flC.push({ valor: B, fluxo: f });
         ant = d;
       });
@@ -874,6 +874,95 @@
     };
   }
 
+
+  // ------------------------------------------------------------------ 3.6 risco e concentração
+  // Fórmulas padrão, adaptadas de skills/portfolio-manager/references (tradermonty/claude-trading-skills, MIT):
+  // HHI = Σ(w·100)², desvio padrão amostral (n−1) e drawdown máximo pico-a-vale. Aqui os retornos usam a mesma
+  // convenção do TWR (aportes não contam como retorno), então a simulação e o risco falam da mesma série.
+  var DIAS_UTEIS_ANO = 252;
+  var MIN_OBS_VOL = 20;       // abaixo disso o desvio padrão não é confiável: devolve null
+  var LIMITES = {
+    vol: [15, 25],            // % ao ano: abaixo de 15 baixa, até 25 moderada, acima alta (orientativo)
+    dd: [15, 30],             // % de queda máxima: até 15 baixa, até 30 moderada, acima alta (orientativo)
+    hhi: [1000, 1800, 2500]   // <1000 baixa, <1800 moderada, <2500 alta, ≥2500 muito alta
+  };
+
+  // Concentração por pesos (em % ou em valores quaisquer; são normalizados para somar 100).
+  function concentracao(valores) {
+    var v = (valores || []).filter(function (x) { return isNum(x) && x > 0; });
+    if (!v.length) return null;
+    var tot = 0; v.forEach(function (x) { tot += x; });
+    var w = v.map(function (x) { return x / tot * 100; }).sort(function (a, b) { return b - a; });
+    var hhi = 0; w.forEach(function (x) { hhi += x * x; });
+    var top3 = 0; for (var i = 0; i < Math.min(3, w.length); i++) top3 += w[i];
+    var nivel = hhi < LIMITES.hhi[0] ? 'baixa' : hhi < LIMITES.hhi[1] ? 'moderada' : hhi < LIMITES.hhi[2] ? 'alta' : 'muito alta';
+    return { n: w.length, hhi: hhi, nEfetivo: 10000 / hhi, maiorPct: w[0], top3Pct: top3, nivel: nivel };
+  }
+
+  // Retornos por período a partir de linhas {valor, fluxo}: r = (valor − fluxo) / valor anterior − 1 (como o TWR).
+  function retornosLinhas(linhas) {
+    var r = [];
+    for (var t = 1; t < (linhas || []).length; t++) {
+      var ant = linhas[t - 1].valor;
+      if (isNum(ant) && ant > 0 && isNum(linhas[t].valor)) r.push((linhas[t].valor - (linhas[t].fluxo || 0)) / ant - 1);
+    }
+    return r;
+  }
+
+  // Desvio padrão amostral anualizado (%). null com poucas observações.
+  function volatilidadeAnual(retornos, periodosAno) {
+    var n = retornos ? retornos.length : 0;
+    if (n < MIN_OBS_VOL) return null;
+    var m = 0; retornos.forEach(function (x) { m += x; }); m /= n;
+    var q = 0; retornos.forEach(function (x) { q += (x - m) * (x - m); });
+    return Math.sqrt(q / (n - 1)) * Math.sqrt(periodosAno || DIAS_UTEIS_ANO) * 100;
+  }
+
+  // Drawdown pico-a-vale sobre o índice de retorno (aportes neutralizados). Valores de queda em % negativos.
+  function drawdown(linhas) {
+    if (!linhas || linhas.length < 2) return null;
+    var idx = 1, pico = 1, dPico = linhas[0].data, maxDD = 0, dMaxPico = dPico, dMaxVale = dPico, atual = 0, dPicoAtual = dPico;
+    for (var t = 1; t < linhas.length; t++) {
+      var ant = linhas[t - 1].valor;
+      if (isNum(ant) && ant > 0 && isNum(linhas[t].valor)) idx *= (linhas[t].valor - (linhas[t].fluxo || 0)) / ant;
+      if (idx > pico) { pico = idx; dPico = linhas[t].data; }
+      var dd = idx / pico - 1;
+      if (dd < maxDD) { maxDD = dd; dMaxPico = dPico; dMaxVale = linhas[t].data; }
+      atual = dd; dPicoAtual = dPico;
+    }
+    return {
+      maxPct: maxDD * 100, dataPico: dMaxPico, dataVale: dMaxVale, atualPct: atual * 100, dataPicoAtual: dPicoAtual,
+      emQueda: atual < 0, diasPicoAVale: maxDD < 0 ? diasEntre(dMaxPico, dMaxVale) : 0
+    };
+  }
+
+  function nivelPor(x, lim, rot) { return x < lim[0] ? rot[0] : x < lim[1] ? rot[1] : rot[2]; }
+
+  // Resumo de risco de uma série de linhas {data, valor, fluxo}: o mesmo objeto alimenta o modo Fácil e o Avançado.
+  function riscoSerie(linhas) {
+    var n = linhas ? linhas.length : 0;
+    var ret = retornosLinhas(linhas);
+    var dias = n > 1 ? diasEntre(linhas[0].data, linhas[n - 1].data) : 0;
+    var vol = volatilidadeAnual(ret);
+    var dd = drawdown(linhas);
+    var avisos = [];
+    if (vol === null) avisos.push('Menos de ' + MIN_OBS_VOL + ' observações: volatilidade não calculada.');
+    if (dias > 0 && dias < 365) avisos.push('Período menor que 1 ano: o risco medido pode não representar outros momentos do mercado.');
+    else if (dias >= 365 && dias < 3 * 365) avisos.push('Período menor que 3 anos: poucos ciclos de mercado na amostra.');
+    avisos.push('Risco medido no passado; não prevê perdas futuras e o pior cenário real pode ser maior.');
+    var nv = null;
+    if (vol !== null && dd) {
+      var a = nivelPor(vol, LIMITES.vol, ['baixo', 'moderado', 'alto']);
+      var b = nivelPor(-dd.maxPct, LIMITES.dd, ['baixo', 'moderado', 'alto']);
+      var ordem = ['baixo', 'moderado', 'alto'];
+      nv = ordem[Math.max(ordem.indexOf(a), ordem.indexOf(b))];
+    }
+    return {
+      observacoes: ret.length, dias: dias, volAnualPct: vol, drawdown: dd, nivel: nv,
+      piorDiaPct: ret.length ? Math.min.apply(null, ret) * 100 : null, avisos: avisos, limites: LIMITES
+    };
+  }
+
   // ------------------------------------------------------------------ 3.5 utilidades
   function validarTicker(t) {
     if (typeof t !== 'string') return { ok: false, ticker: null, erro: 'Informe o código do ativo.' };
@@ -894,6 +983,8 @@
     toCents: toCents, fromCents: fromCents, fmtBRL: fmtBRL, taxas: taxas, estimarQuantidade: estimarQuantidade,
     efetivas: efetivas, validarTx: validarTx, posicoes: posicoes, caixa: caixa, alocacao: alocacao,
     planejarAportes: planejarAportes, simular: simular, xirr: xirr, twr: twr,
+    concentracao: concentracao, retornosLinhas: retornosLinhas, volatilidadeAnual: volatilidadeAnual,
+    drawdown: drawdown, riscoSerie: riscoSerie, LIMITES_RISCO: LIMITES,
     validarTicker: validarTicker, addMeses: addMeses, diasEntre: diasEntre, dataValida: dataValida,
     _rnd: rnd, _fmtDataISO: fmtDataISO
   };
