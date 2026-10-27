@@ -17,6 +17,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Testes de cálculo (JavaScript)
-        run: node --test 03_painel/painel/app/tests/
+        run: node --test 03_painel/painel/app/tests/invest.test.js
       - name: Testes do pipeline (Python)
         run: python 03_painel/atualizar.py teste
