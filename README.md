@@ -53,7 +53,7 @@ O app do GitHub Pages (não o painel do Claude) organiza tudo em quatro áreas: 
 
 ### Modo Fácil e modo Avançado
 
-Um alternador na barra superior troca a **apresentação**, nunca os dados nem os cálculos (`invest-modo.js`; escolha guardada só no aparelho). Quem já tem transações começa no Avançado; os demais, no Fácil.
+Um botão de tema (claro/escuro, lembrado no aparelho; sem escolha, segue o sistema) fica ao lado do alternador. O alternador na barra superior troca a **apresentação**, nunca os dados nem os cálculos (`invest-modo.js`; escolha guardada só no aparelho). Quem já tem transações começa no Avançado; os demais, no Fácil.
 
 | Elemento | Fácil (2–5 min) | Avançado (15–20 min) |
 |---|---|---|

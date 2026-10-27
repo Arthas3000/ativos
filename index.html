@@ -6,6 +6,7 @@
 <title>Painel B3</title>
 <meta name="description" content="Score de oportunidades em ações e FIIs da B3. Material educacional.">
 <meta name="theme-color" content="#1f3a34">
+<script>try{var t=(JSON.parse(localStorage.getItem('pb-ui-v1'))||{}).tema;if(t==='claro'||t==='escuro')document.documentElement.setAttribute('data-tema',t)}catch(e){}</script>
 <link rel="manifest" href="docs/manifest.webmanifest">
 <link rel="icon" href="docs/icon-192.png">
 <link rel="apple-touch-icon" href="docs/icon-192.png">
@@ -31,7 +32,7 @@
     --font-anthropic-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-tema="claro"]) {
       --color-bg: #111614; --color-panel: #1a211e; --color-fg: #e8ece9; --color-fg-muted: #9aa5a0;
       --color-border-line: #2c3531; --color-ok: #5cc795; --color-warn: #e0a54a; --color-bad: #f07a70;
       --c0: #5cc0a6; --c1: #e79a55; --c2: #86a8dc; --c3: #bb8fd6; --c4: #e07a9c; --c5: #5ec2cf; --c6: #b5c457; --c7: #b9a58f;
@@ -39,6 +40,16 @@
       --cds-chart-status-critical: #f07a70; --cds-surface-popover: #222a27; --cds-border: #36403c;
       --cds-shadow-popover: 0 4px 16px rgb(0 0 0 / .5); --cds-text-secondary: #9aa5a0; color-scheme: dark;
     }
+  }
+  :root[data-tema="escuro"] {
+      --color-bg: #111614; --color-panel: #1a211e; --color-fg: #e8ece9; --color-fg-muted: #9aa5a0;
+      --color-border-line: #2c3531; --color-ok: #5cc795; --color-warn: #e0a54a; --color-bad: #f07a70;
+      --c0: #5cc0a6; --c1: #e79a55; --c2: #86a8dc; --c3: #bb8fd6; --c4: #e07a9c; --c5: #5ec2cf; --c6: #b5c457; --c7: #b9a58f;
+      --cds-chart-grid: #232b28; --cds-chart-axis: #3a4440; --cds-chart-reference: #7d8883; --cds-chart-muted: #4e5a55;
+      --cds-chart-status-critical: #f07a70; --cds-surface-popover: #222a27; --cds-border: #36403c;
+      --cds-shadow-popover: 0 4px 16px rgb(0 0 0 / .5); --cds-text-secondary: #9aa5a0; color-scheme: dark;
+  }
+  :root[data-tema="claro"] { color-scheme: light; }
   }
   html { -webkit-text-size-adjust: 100%; }
   /* As abas usam o atributo hidden; .pb-page { display: grid } o anularia fora do Claude */

@@ -81,7 +81,7 @@
     '.inv-resumo-lista .l{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}',
     '.inv-resumo-lista .m{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
     '.inv-modo-aviso{margin:0;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
-    '@media (max-width:640px){.inv-modo button{padding:.3rem .6rem}.app-actions{gap:.35rem;flex:none}.app-brand{flex:1 1 0;overflow:hidden}.app-brand small{display:none}}'
+    '@media (max-width:640px){.inv-tema .inv-tema-t{display:none}.inv-modo button{padding:.3rem .5rem}.app-actions{gap:.25rem;flex:none}.app-actions .app-btn{padding:.35rem .45rem}.app-actions .app-btn svg{display:none}.app-brand{flex:1 1 0;overflow:hidden}.app-brand small{display:none}}'
   ].join('\n');
   var st = document.createElement('style'); st.id = 'inv-modo-css'; st.textContent = css; document.head.appendChild(st);
 
@@ -101,6 +101,31 @@
   });
   var acoes = barra && barra.querySelector('.app-actions');
   if (acoes) acoes.insertBefore(grupo, acoes.firstChild); else if (barra) barra.appendChild(grupo); else raiz.insertBefore(grupo, raiz.firstChild);
+  /* ---------- tema claro / escuro (sem escolha, segue o sistema) ---------- */
+  var mq = W.matchMedia ? W.matchMedia('(prefers-color-scheme: dark)') : null;
+  var escuroAgora = function () {
+    var t = document.documentElement.getAttribute('data-tema');
+    return t === 'escuro' || (t !== 'claro' && !!(mq && mq.matches));
+  };
+  var btnTema = h('button', { type: 'button', class: 'app-btn inv-tema', 'aria-pressed': 'false' });
+  function rotTema() {
+    var e = escuroAgora();
+    btnTema.setAttribute('aria-pressed', String(e));
+    btnTema.replaceChildren(h('span', { 'aria-hidden': 'true' }, e ? '☾' : '☀'), h('span', { class: 'inv-tema-t' }, e ? ' Escuro' : ' Claro'));
+    btnTema.setAttribute('aria-label', e ? 'Tema escuro ativo. Mudar para o claro' : 'Tema claro ativo. Mudar para o escuro');
+    btnTema.title = e ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+    var meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.setAttribute('content', e ? '#111614' : '#1f3a34');
+  }
+  btnTema.addEventListener('click', function () {
+    var novo = escuroAgora() ? 'claro' : 'escuro';
+    document.documentElement.setAttribute('data-tema', novo);
+    gravarPref(function (u) { u.tema = novo; });
+    rotTema();
+    try { PB.redraw(); } catch (e) { /* ok */ }
+  });
+  if (mq && mq.addEventListener) mq.addEventListener('change', rotTema);
+  if (acoes) acoes.insertBefore(btnTema, grupo.nextSibling); else if (barra) barra.appendChild(btnTema);
+  rotTema();
   var anuncio = h('div', { class: 'inv-sr', role: 'status', 'aria-live': 'polite' });
   document.body.appendChild(anuncio);
 
