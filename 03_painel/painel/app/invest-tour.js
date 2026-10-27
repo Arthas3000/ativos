@@ -239,6 +239,9 @@
     s(C_MET, 'metodo', '#metodo .pb-disc', 'Aviso legal',
       'O painel é exclusivamente educacional e informativo. Não é recomendação individualizada de compra, venda ou manutenção, nem substitui análise adequada ao seu perfil e tolerância ao risco. Dados e indicadores mudam, e resultados passados não garantem resultados futuros.');
 
+    s(C_MET, 'glossario', '.inv-glo', 'Glossário e botões “?”',
+      'O Glossário explica todos os termos técnicos do app, com busca e filtro por categoria. Nas telas, o botão “?” ao lado de um termo (TWR, P/VP, lote, gap…) mostra a mesma explicação ali mesmo; Esc fecha, e “Ver no glossário” abre a definição completa.');
+
     /* ---- simulação ---- */
     s(C_SIM, 'simulacao', '#simulacao form', 'Simulação histórica de carteira',
       'Mostra o que teria acontecido com aportes numa carteira escolhida, usando preços e dividendos reais do passado (histórico de 5 anos baixado pelo GitHub Actions). É uma análise do passado: resultado histórico simulado não garante resultado futuro.', SEM_FORM);
@@ -317,7 +320,7 @@
     s(C_CX, 'corretora', 'card:Caixa', 'Caixa',
       'Registre depósitos e retiradas da conta na corretora, com valor, data e hora e observação. Compras reduzem e vendas aumentam o caixa automaticamente. O saldo mostrado é o que você registrou, não o saldo real da conta.');
     s(C_CX, 'corretora', 'card:Transações', 'Transações',
-      'Lista as transações efetivas: data, tipo, ticker, quantidade, preço, taxas, total, fonte do preço, observação e ações. “Corrigir” cria uma transação nova que substitui a anterior; “Cancelar” pede um motivo e cria um cancelamento. O original nunca é apagado, e a opção “Mostrar correções e cancelamentos” exibe o histórico completo. Antes da primeira transação, o card mostra “Nenhuma transação registrada”.');
+      'Lista as transações efetivas: data, tipo, ticker, quantidade, preço, taxas, total, fonte do preço, observação e ações. Busque por ticker ou observação e filtre por tipo. “Corrigir” grava uma versão nova que substitui a anterior; “Anular” pede um motivo e tira a transação das contas. Nada é apagado: a opção “Mostrar também as versões corrigidas e as anulações” exibe o histórico completo. Sem nenhuma transação, o quadro sugere começar pelo depósito.');
     s(C_CX, 'corretora', 'card:Meus ativos', 'Meus ativos',
       'Cadastre ativos que não estão nos 20 do painel: ticker no formato B3 (4 letras e 1 ou 2 dígitos), nome, classe, lote e preço manual opcional. Só vale para reais e B3. Eles podem ser comprados e entram no planejamento de aporte; para entrar no Simulador, o ticker precisa estar na lista “extras” do config.json. Não é possível remover um ativo que tenha posição ou transação.');
 

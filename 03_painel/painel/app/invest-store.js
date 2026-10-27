@@ -194,7 +194,7 @@
   function gravar(novo, silencioso, origem) {
     if (!memOnly) {
       try { localStorage.setItem(KEY, JSON.stringify(novo)); } catch (e) {
-        throw new Error('Não foi possível gravar os dados neste navegador (armazenamento cheio ou bloqueado). Nada foi alterado. Exporte um backup em Configurações.');
+        throw new Error('Não foi possível gravar os dados neste navegador (armazenamento cheio ou bloqueado). Nada foi alterado. Exporte um backup em Ajustes › Backup.');
       }
     }
     estado = novo;
@@ -697,7 +697,7 @@
     };
     const out = [];
     if (!arm.persistente) {
-      out.push(aviso('Este navegador não permite gravar dados locais (modo privado ou bloqueio). O app funciona só na memória e tudo se perde ao fechar a página. Em Configurações, use "Exportar backup" para guardar.', 'warn'));
+      out.push(aviso('Este navegador não permite gravar dados locais (modo privado ou bloqueio). O app funciona só na memória e tudo se perde ao fechar a página. Em Ajustes › Backup, use "Exportar backup" para guardar.', 'warn'));
     }
     if (arm.corrompido || arm.copiaCorrompida) {
       const msg = el('div', { 'aria-live': 'polite' });
@@ -720,8 +720,8 @@
       if (arm.copiaCorrompida) botoes();
       out.push(el('div', { style: 'display:grid;gap:var(--cds-gap-xs)' },
         aviso(arm.copiaCorrompida
-          ? 'Havia dados ilegíveis no armazenamento local. Uma cópia foi mantida neste navegador (baixe-a abaixo) e o app começou vazio; se tiver um backup, importe-o em Configurações.'
-          : 'Havia dados ilegíveis no armazenamento local e o app começou vazio; se tiver um backup, importe-o em Configurações.', 'warn'),
+          ? 'Havia dados ilegíveis no armazenamento local. Uma cópia foi mantida neste navegador (use "Baixar cópia" neste aviso) e o app começou vazio; se tiver um backup, importe-o em Ajustes › Backup.'
+          : 'Havia dados ilegíveis no armazenamento local e o app começou vazio; se tiver um backup, importe-o em Ajustes › Backup.', 'warn'),
         arm.copiaCorrompida ? acoes : null, msg));
     }
     return out;
@@ -919,7 +919,10 @@
     if (ctl) try { W.PB.redraw(); } catch (e) { /* ok */ }
   }
   // vai para uma aba e, se houver, para uma seção dela
-  function ir(pg, sc) { if (abas[pg]) W.PB.show(pg); if (sc && secoesReg[pg]) secoesReg[pg].mostrar(sc); }
+  function ir(pg, sc) {
+    if (abas[pg] || document.querySelector('[data-page="' + pg + '"]')) W.PB.show(pg);
+    if (sc && secoesReg[pg]) secoesReg[pg].mostrar(sc);
+  }
 
   function aoMostrar(id, fn) {
     const roda = () => {
@@ -1003,18 +1006,33 @@
     const cf = {
       taxaFixa: campo({ id: 'inv-cfg-fixa', rotulo: 'Corretagem fixa por ordem (R$)', tipo: 'text', ajuda: 'Ex.: 0 ou 4,90.', attrs: { inputmode: 'decimal' } }),
       taxaPct: campo({ id: 'inv-cfg-pct', rotulo: 'Emolumentos e taxas (%)', tipo: 'text', ajuda: 'Percentual sobre o valor da ordem. Ex.: 0,03.', attrs: { inputmode: 'decimal' } }),
-      lote: campo({ id: 'inv-cfg-lote', rotulo: 'Lote padrão dos 20 ativos do painel', tipo: 'text', ajuda: '1 = mercado fracionário; 100 = lote padrão.', attrs: { inputmode: 'numeric' } }),
-      intens: campo({ id: 'inv-cfg-intens', rotulo: 'Intensidade padrão do score (0–100%)', tipo: 'text', ajuda: 'Quanto o score do painel reordena a prioridade no Assistente.', attrs: { inputmode: 'decimal' } })
+      lote: campo({ id: 'inv-cfg-lote', rotulo: 'Lote padrão dos 20 ativos do painel', tipo: 'select',
+        opcoes: [{ valor: '1', rotulo: '1 — mercado fracionário (compra de 1 em 1)' }, { valor: '100', rotulo: '100 — lote padrão (compra de 100 em 100)' }],
+        ajuda: 'Define de quantas em quantas ações as estimativas e o planejamento calculam. FIIs costumam negociar de 1 em 1.' }),
+      intens: campo({ id: 'inv-cfg-intens', rotulo: 'Intensidade padrão do score', tipo: 'range',
+        ajuda: 'Quanto o score do painel muda a ordem de prioridade ao planejar aportes. 0% = ignora o score; nunca dá dinheiro a quem já está acima do alvo.',
+        attrs: { min: '0', max: '100', step: '5' } })
     };
     let sujo = false;
+    // mostra o valor do controle deslizante e o efeito em palavras
+    const saidaIntens = el('output', { for: 'inv-cfg-intens', class: 'inv-range-val', 'aria-live': 'polite' });
+    cf.intens.input.after(saidaIntens);
+    function mostrarIntens() {
+      const v = Number(cf.intens.input.value);
+      saidaIntens.textContent = v + '% — ' + (v === 0 ? 'não usa o score' : v <= 30 ? 'efeito suave' : v <= 70 ? 'efeito moderado' : 'efeito forte');
+    }
+    cf.intens.input.addEventListener('input', mostrarIntens);
     const stCustos = el('div', { 'aria-live': 'polite' });
     Object.keys(cf).forEach((k) => cf[k].input.addEventListener('input', () => { sujo = true; }));
     function preencherCustos() {
       const c = estado.config;
       cf.taxaFixa.input.value = fmtIn(C().fromCents(c.taxaFixaCent), 2);
       cf.taxaPct.input.value = fmtIn(c.taxaPct, 2);
-      cf.lote.input.value = String(c.lotePadrao);
-      cf.intens.input.value = fmtIn(c.intensidadeScore * 100, 0);
+      const sl = cf.lote.input;
+      if (![].some.call(sl.options, (o) => o.value === String(c.lotePadrao))) sl.append(el('option', { value: String(c.lotePadrao) }, String(c.lotePadrao) + ' (valor salvo antes)'));
+      sl.value = String(c.lotePadrao);
+      cf.intens.input.value = String(Math.round(c.intensidadeScore * 100));
+      mostrarIntens();
     }
     function salvarCustos() {
       let ok = true;
@@ -1042,7 +1060,7 @@
       } catch (e) { status(stCustos, av(e.message, 'bad')); }
     }
     const cardCustos = card('Custos padrão',
-      el('p', { class: 'pb-note' }, 'Valores usados como ponto de partida na Corretora e no Assistente. Você pode ajustá-los em cada operação.'),
+      el('p', { class: 'pb-note' }, 'Pontos de partida para as estimativas de compra e o planejamento de aporte. Você pode mudar os valores em cada operação.'),
       el('div', { class: 'inv-form' }, cf.taxaFixa, cf.taxaPct, cf.lote, cf.intens),
       el('div', { class: 'inv-actions' }, el('button', { type: 'button', class: 'pb-btn inv-pri', onclick: salvarCustos }, 'Salvar custos')),
       stCustos);
@@ -1074,9 +1092,9 @@
             { rotulo: 'Classe', alinhar: 'l', render: (a) => a.classe },
             { rotulo: 'Histórico longo', alinhar: 'l', render: (a) => (u(a.ticker) && u(a.ticker).temSerie ? 'já tem série' : 'ainda sem série') }
           ], estado.ativosCustom, { legenda: 'Ativos personalizados e situação do histórico' })
-          : el('p', { class: 'pb-note' }, 'Você ainda não cadastrou ativos personalizados. Eles são cadastrados na aba Corretora, em "Meus ativos".'),
+          : el('p', { class: 'pb-note' }, 'Você ainda não cadastrou ativos próprios. Eles são cadastrados em Minha carteira › Meus ativos.'),
         el('p', { class: 'pb-note' }, lista.length
-          ? 'Para que a Simulação tenha histórico desses ativos, o ticker precisa estar na lista "extras" do arquivo 03_painel/config.json. Junte o trecho abaixo aos tickers que já estiverem lá:'
+          ? 'Para que o Simulador tenha histórico desses ativos, o ticker precisa estar na lista "extras" do arquivo 03_painel/config.json. Junte o trecho abaixo aos tickers que já estiverem lá:'
           : 'Exemplo do trecho que vai no arquivo 03_painel/config.json (troque pelos seus tickers):'),
         el('pre', { class: 'inv-code', tabindex: '0', 'aria-label': 'Trecho para o config.json' }, trecho),
         el('div', { class: 'inv-actions' },
@@ -1134,7 +1152,7 @@
       if (campoApagar.input.value !== 'APAGAR') return;
       try {
         apagarTudo(); campoApagar.input.value = ''; btnApagar.disabled = true; limparImport();
-        status(stApagar, av('Todos os dados da carteira foram apagados deste aparelho. O token da brapi não foi apagado (use "Apagar token" acima).', 'ok'));
+        status(stApagar, av('Todos os dados da carteira foram apagados deste aparelho. O token da brapi não foi apagado (use "Apagar token" em Ajustes › Cotações).', 'ok'));
       } catch (e) { status(stApagar, av(e.message, 'bad')); }
     } }, 'Apagar todos os dados');
     campoApagar.input.addEventListener('input', () => { btnApagar.disabled = campoApagar.input.value !== 'APAGAR'; });

@@ -389,9 +389,23 @@
         h('th', { scope: 'col', class: 'pb-hide-sm' }, 'Score'))),
       tbody));
     atualizarCont(); filtrar();
+    // atalhos de seleção: marcam de uma vez os ativos com alvo ou os que já estão na carteira
+    var comAlvo = u.filter(function (a) { return alvosSalvos[a.ticker] !== undefined && alvosSalvos[a.ticker] !== null; }).map(function (a) { return a.ticker; });
+    var naCarteira = u.filter(function (a) { return !!pos[a.ticker]; }).map(function (a) { return a.ticker; });
+    function marcar(lista) {
+      S.sel = lista.slice(); plano = null; erroPlano = null;
+      Array.prototype.forEach.call(tbody.querySelectorAll('input[type="checkbox"]'), function (cb, i) { cb.checked = S.sel.indexOf(u[i].ticker) >= 0; });
+      atualizarCont(); persistir();
+    }
+    var atalhos = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Seleção rápida' },
+      h('span', { class: 'pb-note' }, 'Seleção rápida:'),
+      btn('Os ' + comAlvo.length + ' com alvo definido', function () { marcar(comAlvo); }, { disabled: !comAlvo.length }),
+      btn('Os ' + naCarteira.length + ' da minha carteira', function () { marcar(naCarteira); }, { disabled: !naCarteira.length }),
+      btn('Limpar seleção', function () { marcar([]); }, { disabled: false }));
     return h('div', { class: 'inv-stack' },
       h('p', { class: 'pb-note' }, 'Escolha os ativos que podem receber este aporte. Exposição atual = % do valor de mercado da carteira real registrada (sem simulações). Preço de referência: último fechamento ou valor manual; confirme a cotação no passo 2.'),
       h('div', { class: 'pb-controls' }, h('label', { for: buscaId }, 'Buscar ativo'), busca, cont),
+      atalhos,
       tab,
       ativoSemPreco() ? aviso('Há ativos selecionados sem preço de referência: eles não receberão valor até você informar o preço no passo 2.', 'warn') : null,
       nav(null, function () {
@@ -432,8 +446,15 @@
         onInput: function (v) { S.taxaFixa = v; plano = null; persistir(); rev(); } }),
       campo({ id: 'inva-tp', rotulo: 'Emolumentos e taxas (%)', valor: S.taxaPct !== null ? S.taxaPct : String(cfgv.taxaPct || 0).replace('.', ','), erroId: 'err-taxaPct',
         onInput: function (v) { S.taxaPct = v; plano = null; persistir(); rev(); } }),
-      campo({ id: 'inva-int', rotulo: 'Intensidade do score (0–100%)', valor: S.intens !== null ? S.intens : String(Math.round((cfgv.intensidadeScore === undefined ? 0.3 : cfgv.intensidadeScore) * 100)), erroId: 'err-intens',
-        onInput: function (v) { S.intens = v; plano = null; persistir(); rev(); } }));
+      (function () {   // controle deslizante: valor sempre de 0 a 100, com o efeito em palavras
+        var f = campo({ id: 'inva-int', rotulo: 'Intensidade do score', tipo: 'range', valor: String(Math.min(100, Math.max(0, Math.round(intensVal())))), erroId: 'err-intens',
+          onInput: function (v) { S.intens = v; plano = null; persistir(); rev(); upd(); } });
+        var inp = f.querySelector('input'); inp.min = '0'; inp.max = '100'; inp.step = '5'; inp.removeAttribute('inputmode');
+        var out = h('output', { for: 'inva-int', class: 'inv-range-val', 'aria-live': 'polite' });
+        function upd() { var v = Number(inp.value); out.textContent = v + '% — ' + (v === 0 ? 'não usa o score' : v <= 30 ? 'efeito suave' : v <= 70 ? 'efeito moderado' : 'efeito forte'); }
+        inp.after(out); upd();
+        return f;
+      })());
     var tbody = h('tbody');
     S.sel.forEach(function (t) {
       var a = ativo(t) || { ticker: t }, rowPrecos = S.precos[t], idP = 'inva-preco-' + t;
@@ -765,7 +786,7 @@
   function resultado(div) {
     var r = ui.resultado;
     div.appendChild(aviso(r.n + ' compra(s) registrada(s): ' + r.tickers.join(', ') + '. Total ' + brl(r.total) + '. Caixa registrado agora: ' + brl(r.caixaDepois) + '.', 'info'));
-    div.appendChild(h('p', { class: 'pb-note' }, 'O rascunho do assistente foi limpo. Confira as transações na tabela da aba Corretora.'));
+    div.appendChild(h('p', { class: 'pb-note' }, 'O rascunho do assistente foi limpo. Confira em Minha carteira › Transações.'));
     div.appendChild(h('div', { class: 'inv-actions' }, btn('Novo aporte', function () { ui.resultado = null; render(false); }), btn('Recomeçar', recomecar)));
     return div;
   }

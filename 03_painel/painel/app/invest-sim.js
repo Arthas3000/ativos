@@ -135,11 +135,13 @@
     return x && x.d && x.d.length ? { ini: x.d[0], fim: x.d[x.d.length - 1] } : null;
   }
   function limites() {
-    var ts = S.sel.length ? S.sel : ativosComSerie().map(function (a) { return a.ticker; });
+    // com ativos marcados: período em que TODOS têm dados (início mais tardio); sem nenhum: o maior período disponível
+    var marcados = S.sel.length > 0;
+    var ts = marcados ? S.sel : ativosComSerie().map(function (a) { return a.ticker; });
     var ini = null, fim = null;
     ts.forEach(function (t) {
       var i = info(t); if (!i) return;
-      if (ini === null || i.ini > ini) ini = i.ini;
+      if (ini === null || (marcados ? i.ini > ini : i.ini < ini)) ini = i.ini;
       if (fim === null || i.fim > fim) fim = i.fim;
     });
     var s = serie();
@@ -385,7 +387,8 @@
         h('div', { class: 'inv-field' }, h('label', { for: 'sim-di' }, 'Data inicial'), di, e1),
         h('div', { class: 'inv-field' }, h('label', { for: 'sim-df' }, 'Data final'), df, e2));
     }
-    var dispo = h('small', { class: 'pb-note' }, lim.ini && lim.fim ? 'Há dados dos ativos marcados de ' + fmtData(lim.ini) + ' a ' + fmtData(lim.fim) + '.' : 'Sem dados de preço para os ativos marcados.');
+    var dispo = h('small', { class: 'pb-note' }, !S.sel.length ? (lim.ini ? 'O histórico vai de ' + fmtData(lim.ini) + ' a ' + fmtData(lim.fim) + '. Marque os ativos para ver o período comum a todos eles.' : 'Marque os ativos para ver os períodos disponíveis.')
+      : lim.ini && lim.fim ? 'Período com dados de todos os ativos marcados: ' + fmtData(lim.ini) + ' a ' + fmtData(lim.fim) + '.' : 'Sem dados de preço para os ativos marcados.');
     var err = h('div', { class: 'inv-err', id: errId('periodo'), hidden: true });
     regErr('periodo', err, null);
     elPeriodo.replaceChildren.apply(elPeriodo, [legenda].concat(radios, [extra, dispo, err]).filter(Boolean));
@@ -468,7 +471,7 @@
         secs.mostrar('resultado');
         mostrar();
         elStatus.className = 'pb-note pos';
-        elStatus.textContent = 'Simulação concluída: valor final ' + money(r.resumo.valorFinal) + '. Veja a etapa 2.';
+        elStatus.textContent = 'Simulação concluída: valor final ' + money(r.resumo.valorFinal) + '.';
       } catch (err) {
         R = null;
         res.replaceChildren(h('div', { class: 'pb-card' }, aviso('Não foi possível simular: ' + (err && err.message ? err.message : String(err)), 'bad'),

@@ -9,7 +9,7 @@
 
   const ID = 'corretora';
   const CLASSES = ['Ação', 'FII', 'ETF', 'BDR', 'Outro'];
-  const TIPOS = { compra: 'Compra', venda: 'Venda', deposito: 'Depósito', retirada: 'Retirada', cancelamento: 'Cancelamento' };
+  const TIPOS = { compra: 'Compra', venda: 'Venda', deposito: 'Depósito', retirada: 'Retirada', cancelamento: 'Anulação' };
   const FONTES = { brapi: 'brapi.dev', fechamento: 'fechamento (Actions)', manual: 'manual' };
   const ESTADOS = { 'ao-vivo': 'ao vivo', atrasado: 'atrasado', manual: 'manual', indisponivel: 'indisponível' };
 
@@ -278,11 +278,18 @@
 
   /* 6. Transações */
   R.chkTodas = h('input', { type: 'checkbox', id: 'cor-todas' });
+  R.txBusca = h('input', { type: 'search', class: 'pb-in', id: 'cor-tx-busca', placeholder: 'Ticker ou observação', autocomplete: 'off' });
+  R.txTipo = h('select', { class: 'pb-in', id: 'cor-tx-tipo' },
+    [['', 'Todos os tipos'], ['compra', 'Compras'], ['venda', 'Vendas'], ['deposito', 'Depósitos'], ['retirada', 'Retiradas']].map(([v, t]) => h('option', { value: v }, t)));
+  R.txConta = h('span', { class: 'pb-note', 'aria-live': 'polite' });
   R.txMsg = h('p', { class: 'pb-note', 'aria-live': 'polite' });
   R.tabTx = h('div', { class: 'pb-tablewrap' });
   const cTx = card('Transações',
-    h('p', { class: 'pb-note' }, 'Transações efetivas. Corrigir cria uma nova transação que substitui a anterior; Cancelar cria um cancelamento. O original nunca é apagado.'),
-    h('label', { class: 'inv-cor-check', for: 'cor-todas' }, R.chkTodas, h('span', null, 'Mostrar correções e cancelamentos')),
+    h('p', { class: 'pb-note' }, 'Tudo o que você registrou, do mais recente para o mais antigo. "Corrigir" grava uma versão nova que substitui a anterior; "Anular" tira a transação das contas. Nada é apagado: o histórico completo fica disponível na opção abaixo.'),
+    h('div', { class: 'pb-controls inv-cor-filtros' },
+      h('label', { class: 'inv-sr', for: 'cor-tx-busca' }, 'Buscar transação'), R.txBusca,
+      h('label', { class: 'inv-sr', for: 'cor-tx-tipo' }, 'Tipo de transação'), R.txTipo, R.txConta),
+    h('label', { class: 'inv-cor-check', for: 'cor-todas' }, R.chkTodas, h('span', null, 'Mostrar também as versões corrigidas e as anulações')),
     R.txMsg, R.tabTx);
 
   /* 7. Meus ativos */
@@ -358,7 +365,7 @@
     else {
       const arm = lerInv(() => INV.armazenamento(), null);
       if (arm && arm.persistente === false) nos.push(avisoEl('Este navegador não permite gravar dados locais (modo privado ou bloqueio). O app funciona só na memória e tudo se perde ao fechar a página. Em Configurações, use "Exportar backup" para guardar.', 'warn'));
-      if (arm && (arm.corrompido || arm.copiaCorrompida)) nos.push(avisoEl('Havia dados ilegíveis no armazenamento local e o app começou vazio. Veja Configurações para baixar a cópia ou importar um backup.', 'warn'));
+      if (arm && (arm.corrompido || arm.copiaCorrompida)) nos.push(avisoEl('Havia dados ilegíveis no armazenamento local e o app começou vazio. Veja Ajustes › Backup para baixar a cópia ou importar um backup.', 'warn'));
     }
     R.avisosArm.replaceChildren(...nos);
   }
@@ -406,7 +413,8 @@
       return { t, a, p, ref: d.refs[t] || null, valor, res, resPct: (res !== null && p.custoCent > 0) ? res / p.custoCent * 100 : null, pct: p ? (l ? l.pct : null) : 0, alvo: alvos[t] === undefined ? null : alvos[t] };
     }).sort((x, y) => (y.valor === null ? -1 : y.valor) - (x.valor === null ? -1 : x.valor) || (x.t < y.t ? -1 : 1));
     if (!rows.length) {
-      R.tabPos.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma posição registrada ainda. Registre uma compra abaixo (e, se precisar, um depósito de caixa) para ver a carteira aqui.'));
+      R.tabPos.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma posição registrada ainda. Registre o que você já tem na corretora, uma compra por ativo.'),
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: () => INV.ir(ID, 'operar') }, 'Registrar uma compra'), h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, 'caixa') }, 'Registrar depósito')));
       return;
     }
     const th = (t, c) => h('th', { scope: 'col', class: c || '' }, t);
@@ -502,7 +510,7 @@
   function marcarTipo() {
     Object.keys(R.tipoBtns).forEach((t) => R.tipoBtns[t].setAttribute('aria-pressed', String(t === S.tipo)));
     F.valor.wrap.querySelector('label').textContent = S.tipo === 'compra' ? 'Valor a investir (R$)' : 'Valor a vender (R$)';
-    R.btnReg.textContent = S.editandoId ? 'Salvar correção' : 'Registrar';
+    R.btnReg.textContent = S.editandoId ? 'Salvar correção' : (S.tipo === 'venda' ? 'Registrar venda' : 'Registrar compra');
   }
   function resolverTicker(txt) {
     const t = String(txt || '').trim().toUpperCase().split(/[\s—–-]+/)[0];
@@ -767,8 +775,22 @@
     const efIds = new Set(d.ef.map((t) => t.id));
     const porId = {}; d.txs.forEach((t) => { porId[t.id] = t; });
     let lista = S.todas ? d.txs.slice() : d.ef.slice();
+    const total = lista.length;
+    const q = R.txBusca.value.trim().toUpperCase(), tp = R.txTipo.value;
+    if (q) lista = lista.filter((t) => ((t.ticker || '') + ' ' + (t.obs || '')).toUpperCase().includes(q));
+    if (tp) lista = lista.filter((t) => t.tipo === tp);
     lista.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : ((a.criadoEm || '') < (b.criadoEm || '') ? 1 : -1)));
-    if (!lista.length) { R.tabTx.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma transação registrada.')); return; }
+    R.txConta.textContent = total ? (lista.length === total ? total + ' transação(ões)' : lista.length + ' de ' + total + ' transação(ões)') : '';
+    if (!total) {
+      R.tabTx.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma transação registrada ainda. Comece registrando o saldo da conta em "Caixa" e depois as compras em "Comprar ou vender".'),
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, 'caixa') }, 'Registrar depósito')));
+      return;
+    }
+    if (!lista.length) {
+      R.tabTx.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma transação com esses filtros.'),
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => { R.txBusca.value = ''; R.txTipo.value = ''; renderTxs(D || dados()); R.txBusca.focus(); } }, 'Limpar filtros')));
+      return;
+    }
     const th = (t, c) => h('th', { scope: 'col', class: c || '' }, t);
     const thead = h('thead', null, h('tr', null, th('Data', 'l'), th('Tipo', 'l'), th('Ticker', 'l'), th('Qtd'), th('Preço', 'pb-hide-sm'), th('Taxas', 'pb-hide-sm'), th('Total'),
       th('Fonte', 'l pb-hide-sm'), th('Obs.', 'l pb-hide-sm'), th('Ações', 'l')));
@@ -783,7 +805,7 @@
       if (efetiva && t.tipo !== 'cancelamento') {
         acoes.append(
           h('button', { type: 'button', class: 'pb-btn', 'aria-label': 'Corrigir ' + descTx(t), onclick: () => (t.tipo === 'compra' || t.tipo === 'venda') ? carregarCorrecao(t) : carregarCorrecaoCaixa(t) }, 'Corrigir'), ' ',
-          h('button', { type: 'button', class: 'pb-btn', 'data-cancelar': t.id, 'aria-label': 'Cancelar ' + descTx(t), onclick: () => { S.cancelandoId = t.id; S.motivo = ''; renderTxs(dados()); const i = document.getElementById('cor-motivo'); if (i) i.focus(); } }, 'Cancelar'));
+          h('button', { type: 'button', class: 'pb-btn', 'data-cancelar': t.id, 'aria-label': 'Anular ' + descTx(t), title: 'Tira a transação das contas (o registro original é mantido)', onclick: () => { S.cancelandoId = t.id; S.motivo = ''; renderTxs(dados()); const i = document.getElementById('cor-motivo'); if (i) i.focus(); } }, 'Anular'));
       }
       tbody.appendChild(h('tr', { class: subst ? 'inv-cor-riscada' : '' },
         h('td', { class: 'l' }, fmtDH(t.data)), h('td', { class: 'l' }, TIPOS[t.tipo] || t.tipo), h('td', { class: 'l' }, t.ticker || '—'),
@@ -807,24 +829,26 @@
         };
         const conf = () => {
           if (S.cancelandoId !== t.id) return;   // linha já fechada (Esc, Voltar ou outro cancelamento)
-          if (!S.motivo.trim()) { err.textContent = 'Informe o motivo do cancelamento.'; err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); mot.focus(); return; }
+          if (!S.motivo.trim()) { err.textContent = 'Informe o motivo da anulação.'; err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); mot.focus(); return; }
           try { INV.cancelarTx(t.id, S.motivo.trim()); }
           catch (e) { err.textContent = msgErro(e); err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); return; }
-          fechar('Cancelado: ' + descTx(t) + '.');
+          fechar('Anulada: ' + descTx(t) + '. Ela continua visível em "Mostrar também as versões corrigidas e as anulações".');
         };
         mot.addEventListener('keydown', (ev) => {
           if (ev.key === 'Enter') { ev.preventDefault(); conf(); }
           else if (ev.key === 'Escape') { ev.preventDefault(); fechar(''); }
         });
         tbody.appendChild(h('tr', null, h('td', { class: 'l', colspan: 10 },
-          h('div', { class: 'inv-cor-row' }, h('label', { for: 'cor-motivo' }, 'Motivo do cancelamento de ' + descTx(t)), mot,
-            h('button', { type: 'button', class: 'pb-btn', onclick: conf }, 'Confirmar cancelamento'),
+          h('div', { class: 'inv-cor-row' }, h('label', { for: 'cor-motivo' }, 'Por que anular ' + descTx(t) + '?'), mot,
+            h('button', { type: 'button', class: 'pb-btn inv-perigo', onclick: conf }, 'Confirmar anulação'),
             h('button', { type: 'button', class: 'pb-btn', onclick: () => fechar('') }, 'Voltar')), err)));
       }
     });
     R.tabTx.replaceChildren(h('table', { class: 'pb-table', 'aria-label': 'Transações' }, thead, tbody));
   }
   R.chkTodas.addEventListener('change', () => { S.todas = R.chkTodas.checked; renderTxs(D || dados()); });
+  R.txBusca.addEventListener('input', () => renderTxs(D || dados()));
+  R.txTipo.addEventListener('change', () => renderTxs(D || dados()));
 
   /* ---------- meus ativos ---------- */
   function renderAtivos(d) {

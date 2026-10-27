@@ -39,7 +39,7 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 | `.github/workflows/atualizar.yml` | Atualização manual pelo botão "Atualizar dados" do app: preços, fundamentos, histórico longo, score, app e snapshot. |
 | `.github/workflows/testes.yml` | Testes a cada push e pull request: `node --test` (cálculos) e `atualizar.py teste` (pipeline). |
 | `03_painel/dados_longos/` | `serie_longa.json` (5 anos diários, com dividendos) e `indices.json` (CDI e IPCA), gerados por `atualizar.py historico`. Não entram no snapshot. |
-| `03_painel/painel/app/invest*.js` | Módulo de investimentos do app: `invest.js` (cálculos), `invest-store.js` (dados, seções e Ajustes), `invest-sim.js` (Simulador), `invest-corretora.js` (Minha carteira), `invest-nav.js` (áreas do app e estilo), `invest-assistente.js` (Assistente de alocação), `invest-tour.js` (tour "Como usar"). |
+| `03_painel/painel/app/invest*.js` | Módulo de investimentos do app: `invest.js` (cálculos), `invest-store.js` (dados, seções e Ajustes), `invest-sim.js` (Simulador), `invest-corretora.js` (Minha carteira), `invest-nav.js` (áreas do app e estilo), `invest-ajuda.js` (glossário e botões “?”), `invest-assistente.js` (Assistente de alocação), `invest-tour.js` (tour "Como usar"). |
 | `03_painel/painel/app/tests/` | Testes dos cálculos (`node --test 03_painel/painel/app/tests/`). |
 
 ## Módulo de investimentos
@@ -49,7 +49,7 @@ O app do GitHub Pages (não o painel do Claude) organiza tudo em quatro áreas: 
 - **Simulador** (etapas Montar carteira › Resultado): carteira histórica com aportes mensais, dividendos e custos, comparada ao Ibovespa, ao CDI e ao IPCA (retorno nominal e real). É análise do passado: não garante resultado futuro.
 - **Minha carteira** (seções Resumo, Posições, Comprar ou vender, Planejar aporte, Caixa, Transações, Meus ativos): o que você registrou, com primeiros passos guiados e o Assistente de alocação de aportes. Uma proposta nunca vira transação sem a sua confirmação, e o app não envia ordens.
 - **Ajustes** (seções Cotações, Custos e lotes, Ativos extras, Backup, Fontes de dados).
-- **Navegação:** o app tem quatro áreas (Mercado, Minha carteira, Simulador, Ajustes), que viram uma barra no rodapé no celular. Cada área se divide em seções, e cada seção tem endereço próprio (ex.: `#corretora/caixa`). O botão **Como usar** abre o tour guiado.
+- **Navegação:** o app tem quatro áreas (Mercado, Minha carteira, Simulador, Ajustes), que viram uma barra no rodapé no celular. Cada área se divide em seções, e cada seção tem endereço próprio (ex.: `#corretora/caixa`). O botão **Como usar** abre o tour guiado; o **Glossário** (em Mercado) e os botões **?** ao lado dos termos explicam o vocabulário técnico. A revisão de UX está em `UX_REVISAO.md`.
 
 Pontos importantes:
 

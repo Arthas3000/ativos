@@ -9,7 +9,7 @@
   var GRUPOS = [
     { id: 'mercado', rotulo: 'Mercado', titulo: 'Mercado',
       desc: 'Análise dos 20 ativos da B3: score, preços, valor justo e cenário econômico.',
-      abas: ['geral', 'ranking', 'valor', 'precos', 'ativo', 'macro', 'historico', 'metodo'],
+      abas: ['geral', 'ranking', 'valor', 'precos', 'ativo', 'macro', 'historico', 'metodo', 'glossario'],
       icone: 'M3 17l5-6 4 4 7-9M14 6h5v5' },
     { id: 'carteira', rotulo: 'Minha carteira', titulo: 'Minha carteira',
       desc: 'O que você tem de verdade: caixa, posições, compras e o planejamento do próximo aporte.',
@@ -26,7 +26,7 @@
   ];
   // nomes mais claros para as abas de Mercado (o id não muda: links antigos continuam valendo)
   var ROTULO = { geral: 'Visão geral', ranking: 'Ranking', valor: 'Valor × queda', precos: 'Preços', ativo: 'Ficha do ativo',
-    macro: 'Cenário macro', historico: 'Histórico do score', metodo: 'Como o score funciona' };
+    macro: 'Cenário macro', historico: 'Histórico do score', metodo: 'Como o score funciona', glossario: 'Glossário' };
   var DESC = {
     geral: 'O resumo do dia: números do mercado, os três primeiros do score e o score de todos, separado por pilar.',
     ranking: 'Todos os ativos numa tabela. Toque no cabeçalho para ordenar e numa linha para abrir a ficha do ativo.',
@@ -35,7 +35,8 @@
     ativo: 'Tudo sobre um ativo: tese, riscos, pontos do score, gráfico de preço e indicadores.',
     macro: 'Juros, câmbio, inflação e bolsa na data da coleta, com a fonte e o grau de confiança de cada número.',
     historico: 'Como o score de cada ativo mudou entre as versões e quão estável é o ranking em outros cenários.',
-    metodo: 'Os parâmetros e as fórmulas por trás do score, em linguagem direta.'
+    metodo: 'Os parâmetros e as fórmulas por trás do score, em linguagem direta.',
+    glossario: 'Todos os termos técnicos do app explicados. Nas telas, toque no “?” ao lado de um termo para ver a explicação ali mesmo.'
   };
   var grupoDe = function (tab) { for (var i = 0; i < GRUPOS.length; i++) if (GRUPOS[i].abas.indexOf(tab) >= 0) return GRUPOS[i]; return GRUPOS[0]; };
   var ultimaAba = {};
@@ -107,6 +108,20 @@
     '.inv-passos .t b{display:block;font-weight:500}',
     '.inv-passos .t span{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
     '.inv-atalhos{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm)}',
+    // campos: fundo do cartão e borda visível (antes pareciam desabilitados); desabilitado fica tracejado
+    '.pb .pb-in{background:var(--color-panel);border-color:var(--cds-chart-reference)}',
+    '.pb .pb-in:hover{border-color:var(--color-fg-muted)}',
+    '.pb .pb-in:disabled{background:var(--color-bg);border-style:dashed;color:var(--color-fg-muted);cursor:not-allowed}',
+    '.pb .pb-in[aria-invalid="true"]{border-color:var(--color-bad)}',
+    '.pb input[type="range"].pb-in{border:0;background:none;padding:0;accent-color:var(--c0);min-height:2rem}',
+    '.inv-range-val{font-size:var(--cds-font-size-caption);font-weight:500}',
+    // alternância Comprar/Vender e outros botões de escolha (aria-pressed): o escolhido fica preenchido
+    '.inv-page .pb-btn[aria-pressed="true"]{background:var(--color-fg);color:var(--color-bg);border-color:var(--color-fg)}',
+    '.inv-page .pb-btn[aria-pressed]{min-width:6rem}',
+    '.pb-btn.inv-perigo{border-color:var(--color-bad);color:var(--color-bad)}',
+    // blocos de números: dois por linha no celular (menos rolagem)
+    '.pb .pb-tiles{grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr))}',
+    '.inv-cor-filtros .pb-in{min-height:2.25rem}',
     '.inv-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}',
     // celular: áreas viram barra inferior, alvos de toque maiores e campos sem zoom no iPhone
     '@media (max-width:640px){',
@@ -122,6 +137,8 @@
     ' .app-btn{padding:.35rem .6rem}',
     ' .inv-page .pb-btn,.inv-page .pb-in{min-height:2.75rem}',
     ' .inv-page input.pb-in,.inv-page select.pb-in{font-size:16px}',
+    ' .inv-page .pb-tiles .pb-big{font-size:clamp(.95rem,4.2vw,1.15rem)}',
+    ' .pb .pb-tiles > .pb-card{padding:var(--cds-pad-md)}',
     '}'
   ].join('\n');
   var st = document.createElement('style'); st.id = 'inv-nav-css'; st.textContent = css; document.head.appendChild(st);
