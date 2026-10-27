@@ -770,7 +770,7 @@
     if (document.getElementById('inv-css')) return;
     const css = `
 .inv-page[hidden]{display:none}
-.inv-page .pb-tiles .pb-big{font-size:clamp(1.25rem,2.4vw,var(--cds-font-size-title));overflow-wrap:anywhere}
+.inv-page .pb-tiles .pb-big{font-size:clamp(1.2rem,1.9vw,1.6rem);white-space:nowrap}
 .inv-form{display:grid;gap:var(--cds-gap-md);grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));align-items:start}
 .inv-field{display:grid;gap:var(--cds-gap-xs);min-width:0;align-content:start}
 .inv-field label{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}

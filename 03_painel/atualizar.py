@@ -353,9 +353,14 @@ def cmd_historico():
     tickers = list(dict.fromkeys(t.strip().upper() for t in tickers if t.strip()))
     ativos, falhas = {}, {}
     ant = json.loads((LONGOS / "serie_longa.json").read_text(encoding="utf-8")) if (LONGOS / "serie_longa.json").exists() else {}
+    # 5 anos + 15 dias antes de data_ref: "range=5y" comecava um pregao depois e deixava "Ultimos 5 anos" sem dados
+    d_ref = dt.date.fromisoformat(ref)
+    p1 = dt.datetime.combine(dt.date(d_ref.year - 5, d_ref.month, min(d_ref.day, 28)) - dt.timedelta(days=15), dt.time(), BRT)
+    p2 = dt.datetime.combine(d_ref + dt.timedelta(days=1), dt.time(23, 59), BRT)
+    janela = f"period1={int(p1.timestamp())}&period2={int(p2.timestamp())}"
     for t in tickers:
         sym = "^BVSP" if t == "IBOV" else t + ".SA"
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=5y&interval=1d&events=div"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?{janela}&interval=1d&events=div"
         try:
             js = http_json(url)
             moeda = (js["chart"]["result"][0]["meta"].get("currency") or "BRL").upper()
@@ -378,7 +383,7 @@ def cmd_historico():
             print(f"{t:7s} FALHOU: {falhas[t]}")
         time.sleep(0.2)
     LONGOS.mkdir(exist_ok=True)
-    fonte = ("Yahoo Finance chart API (range=5y, interval=1d, events=div); close ajustado so por desdobramento; "
+    fonte = ("Yahoo Finance chart API (5 anos + 15 dias ate data_ref, interval=1d, events=div); close ajustado so por desdobramento; "
              "dividendos por acao na data ex")
     serie = {"gerado_em": agora, "fonte": fonte, "data_ref": ref, "ativos": ativos, "falhas": falhas}
     (LONGOS / "serie_longa.json").write_text(json.dumps(serie, ensure_ascii=False), encoding="utf-8")

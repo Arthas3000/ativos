@@ -147,7 +147,11 @@
     return { ini: ini, fim: fim };
   }
   var PERIODOS = [['12m', 12, 'Últimos 12 meses'], ['3a', 36, 'Últimos 3 anos'], ['5a', 60, 'Últimos 5 anos']];
-  function periodoOk(meses, lim) { return !!(lim.ini && lim.fim && addMeses(lim.fim, -meses) >= lim.ini); }
+  // A série de 5 anos do Yahoo pode começar alguns dias depois de "hoje − 5 anos" (feriados, janela da coleta):
+  // até 10 dias de diferença o período vale, começando no primeiro dia com dados.
+  function addDias(s, n) { var d = new Date(s + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+  function inicioPeriodo(meses, lim) { var a = addMeses(lim.fim, -meses); return lim.ini && a < lim.ini ? lim.ini : a; }
+  function periodoOk(meses, lim) { return !!(lim.ini && lim.fim && addDias(addMeses(lim.fim, -meses), 10) >= lim.ini); }
 
   /* ---------- campos ---------- */
   function errId(id) { return 'sim-' + id + '-err'; }
@@ -364,7 +368,7 @@
       var r = h('input', { type: 'radio', name: 'sim-periodo', id: rid, value: p[0], checked: S.periodo === p[0], disabled: !ok });
       r.addEventListener('change', function () { S.periodo = p[0]; setErr('periodo', ''); desenharPeriodo(); agendarSalvar(); });
       return h('label', { class: 'inv-sim-opt', for: rid }, r,
-        h('span', null, p[2], !ok ? h('span', { class: 'pb-label' }, lim.ini ? ' — indisponível: o histórico dos ativos marcados começa em ' + fmtData(lim.ini) : ' — indisponível: sem dados') : (lim.fim ? h('span', { class: 'pb-label' }, ' (de ' + fmtData(addMeses(lim.fim, -p[1])) + ' a ' + fmtData(lim.fim) + ')') : null)));
+        h('span', null, p[2], !ok ? h('span', { class: 'pb-label' }, lim.ini ? ' — indisponível: o histórico dos ativos marcados começa em ' + fmtData(lim.ini) : ' — indisponível: sem dados') : (lim.fim ? h('span', { class: 'pb-label' }, ' (de ' + fmtData(inicioPeriodo(p[1], lim)) + ' a ' + fmtData(lim.fim) + ')') : null)));
     });
     var rc = h('input', { type: 'radio', name: 'sim-periodo', id: 'sim-per-custom', value: 'custom', checked: S.periodo === 'custom' });
     rc.addEventListener('change', function () { S.periodo = 'custom'; desenharPeriodo(); agendarSalvar(); });
@@ -412,7 +416,7 @@
     var per = PERIODOS.filter(function (p) { return p[0] === S.periodo; })[0];
     if (per) {
       if (!periodoOk(per[1], lim)) e('periodo', 'Este período não tem dados suficientes. Escolha outro.');
-      else { fim = lim.fim; inicio = addMeses(lim.fim, -per[1]); }
+      else { fim = lim.fim; inicio = inicioPeriodo(per[1], lim); }
     } else {
       inicio = S.di; fim = S.df;
       if (!validDate(inicio)) e('di', 'Informe a data inicial.');
