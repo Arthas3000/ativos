@@ -15,7 +15,7 @@
   var ROTULO = { facil: 'Fácil', avancado: 'Avançado' };
   var DICA = { facil: 'Fácil: o essencial, em 2 a 5 minutos', avancado: 'Avançado: análise detalhada, em 15 a 20 minutos' };
   // abas do Mercado que só existem no Avançado (o Fácil as resume na tela Resumo) e a aba que só existe no Fácil
-  var TABS_AV = ['geral', 'valor', 'precos', 'macro', 'historico', 'metodo'];
+  var TABS_AV = ['geral', 'ranking', 'valor', 'precos', 'macro', 'historico', 'metodo'];
   var TABS_FACIL = ['resumo'];
   // seções escondidas no Fácil: nada some dos dados, só da navegação
   var SECOES_AV = { corretora: ['ativos'], config: ['custos', 'extras', 'fontes'] };
@@ -70,13 +70,18 @@
     '.inv-risco ul{margin:0;padding-left:1.1rem;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
     '.inv-risco [data-so-avancado]{border-top:1px solid var(--color-border-line);padding-top:var(--cds-pad-sm)}',
     '.inv-risco h3{margin:0;font-size:var(--cds-font-size-body);font-weight:500}',
+    '.inv-faixa{display:flex;flex-wrap:wrap;gap:.4rem 1.5rem}',
+    '.inv-ez .m{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
+    '.inv-ez td{vertical-align:top}',
+    '.inv-link{font:inherit;font-weight:600;background:none;border:0;padding:0;color:var(--color-fg);text-decoration:underline;cursor:pointer;min-height:1.75rem}',
+    '.inv-link:focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}',
     '.inv-resumo-lista{display:grid;gap:0;list-style:none;margin:0;padding:0}',
     '.inv-resumo-lista li{display:grid;gap:.15rem;padding:var(--cds-pad-sm) 0;border-top:1px solid var(--color-border-line)}',
     '.inv-resumo-lista li:first-child{border-top:0}',
     '.inv-resumo-lista .l{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}',
     '.inv-resumo-lista .m{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
     '.inv-modo-aviso{margin:0;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
-    '@media (max-width:640px){.inv-modo button{padding:.3rem .6rem}.app-actions{gap:.35rem;flex:none}.app-brand{flex:1 1 0;overflow:hidden}.app-brand small{display:none}}'
+    '@media (max-width:640px){.inv-tema .inv-tema-t{display:none}.inv-modo button{padding:.3rem .5rem}.app-actions{gap:.25rem;flex:none}.app-actions .app-btn{padding:.35rem .45rem}.app-actions .app-btn svg{display:none}.app-brand{flex:1 1 0;overflow:hidden}.app-brand small{display:none}}'
   ].join('\n');
   var st = document.createElement('style'); st.id = 'inv-modo-css'; st.textContent = css; document.head.appendChild(st);
 
@@ -96,6 +101,31 @@
   });
   var acoes = barra && barra.querySelector('.app-actions');
   if (acoes) acoes.insertBefore(grupo, acoes.firstChild); else if (barra) barra.appendChild(grupo); else raiz.insertBefore(grupo, raiz.firstChild);
+  /* ---------- tema claro / escuro (sem escolha, segue o sistema) ---------- */
+  var mq = W.matchMedia ? W.matchMedia('(prefers-color-scheme: dark)') : null;
+  var escuroAgora = function () {
+    var t = document.documentElement.getAttribute('data-tema');
+    return t === 'escuro' || (t !== 'claro' && !!(mq && mq.matches));
+  };
+  var btnTema = h('button', { type: 'button', class: 'app-btn inv-tema', 'aria-pressed': 'false' });
+  function rotTema() {
+    var e = escuroAgora();
+    btnTema.setAttribute('aria-pressed', String(e));
+    btnTema.replaceChildren(h('span', { 'aria-hidden': 'true' }, e ? '☾' : '☀'), h('span', { class: 'inv-tema-t' }, e ? ' Escuro' : ' Claro'));
+    btnTema.setAttribute('aria-label', e ? 'Tema escuro ativo. Mudar para o claro' : 'Tema claro ativo. Mudar para o escuro');
+    btnTema.title = e ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
+    var meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.setAttribute('content', e ? '#111614' : '#1f3a34');
+  }
+  btnTema.addEventListener('click', function () {
+    var novo = escuroAgora() ? 'claro' : 'escuro';
+    document.documentElement.setAttribute('data-tema', novo);
+    gravarPref(function (u) { u.tema = novo; });
+    rotTema();
+    try { PB.redraw(); } catch (e) { /* ok */ }
+  });
+  if (mq && mq.addEventListener) mq.addEventListener('change', rotTema);
+  if (acoes) acoes.insertBefore(btnTema, grupo.nextSibling); else if (barra) barra.appendChild(btnTema);
+  rotTema();
   var anuncio = h('div', { class: 'inv-sr', role: 'status', 'aria-live': 'polite' });
   document.body.appendChild(anuncio);
 
@@ -159,11 +189,25 @@
     try { W.scrollTo({ top: 0 }); } catch (e) { /* ok */ }
   }
 
-  /* ---------- tela "Resumo" (só Fácil) ---------- */
+  /* ---------- indicação: a mesma classificação (sinal) lida em linguagem de decisão, nos dois modos ---------- */
+  var INDICACAO = {
+    'oportunidade': ['Candidata a compra', 'Nota alta e preço abaixo do valor justo.'],
+    'oportunidade-com-risco': ['Compra com cautela', 'Preço atrativo, mas com um risco relevante.'],
+    'qualidade-sem-margem': ['Boa, mas sem desconto', 'Empresa sólida; o preço já reflete isso. Aguardar.'],
+    'neutro': ['Neutro: acompanhar', 'Sem desconto nem alerta claros.'],
+    'risco-rendimento': ['Atenção ao rendimento', 'O rendimento pode não se sustentar.'],
+    'armadilha': ['Evitar (armadilha)', 'Parece barato, mas os fundamentos pioram.']
+  };
+  var corInd = function (sinal) { return sinal === 'neutro' ? 'var(--color-fg-muted)' : PB.sinalColor(sinal); };
+  var indicacao = function (sinal) { return (INDICACAO[sinal] || [PB.sinalName(sinal), ''])[0]; };
+  var CANDIDATAS = ['oportunidade', 'oportunidade-com-risco'];
+  var filtroFacil = { classe: '', soCompra: false };
+
+  /* ---------- tela "Hoje" (só Fácil) ---------- */
   var pagina = h('section', { class: 'pb-page', id: 'resumo', 'data-page': 'resumo', hidden: true });
   var primeira = raiz.querySelector('[data-page="geral"]');
   raiz.insertBefore(pagina, primeira || null);
-  var aba = h('button', { class: 'pb-tab', role: 'tab', 'data-tab': 'resumo', 'aria-selected': 'false' }, 'Resumo');
+  var aba = h('button', { class: 'pb-tab', role: 'tab', 'data-tab': 'resumo', 'aria-selected': 'false' }, 'Hoje');
   aba.addEventListener('click', function () { PB.show('resumo'); });
   nav.insertBefore(aba, nav.firstChild);
   NAV.grupos[0].abas.unshift('resumo');
@@ -190,39 +234,47 @@
     var mg = dash.data('margem_positiva'), sn = dash.data('sinais');
     var nMs = mg.status === 'ok' ? mg.data[0].n : null, tkMs = mg.status === 'ok' ? mg.data[0].tickers : '';
 
-    var frase = h('div', { class: 'pb-card' },
-      h('h2', null, 'O essencial de hoje'),
-      h('p', { class: 'pb-text' }, nMs === null ? 'Dados de valor justo indisponíveis.' :
-        'Com custo de capital de ' + num(p.ke, 1) + '%, só ' + nMs + (nMs === 1 ? ' ação está' : ' ações estão') + ' abaixo do valor justo' + (tkMs ? ' (' + tkMs + ')' : '') + '.'),
-      h('p', { class: 'pb-note' }, 'Versão ' + p.versao + ' · preços de ' + dt(p.data_ref) + ' · evento de estresse: ' + p.evento + '.'));
+    var faixa = h('div', { class: 'pb-card' },
+      h('h2', null, 'Cenário em 4 números'),
+      h('div', { class: 'inv-faixa' },
+        h('span', null, 'Ibovespa no estresse ', h('b', { class: PB.cls(m('Ibovespa variação')) }, PB.sig(m('Ibovespa variação'), 2) + '%')),
+        h('span', null, 'Selic ', h('b', null, num(m('Selic meta'), 2) + '%')),
+        h('span', null, 'Dólar ', h('b', null, 'R$ ' + num(m('Dólar comercial fechamento'), 2))),
+        h('span', null, 'DI jan/31 ', h('b', null, num(m('DI jan/31'), 2) + '%'))),
+      h('p', { class: 'pb-note' }, (nMs === null ? 'Dados de valor justo indisponíveis. ' : 'Com custo de capital de ' + num(p.ke, 1) + '%, só ' + nMs + (nMs === 1 ? ' ação está' : ' ações estão') + ' abaixo do valor justo' + (tkMs ? ' (' + tkMs + ')' : '') + '. ') +
+        'Versão ' + p.versao + ' · preços de ' + dt(p.data_ref) + ' · ' + p.evento + '.'));
 
-    var tiles = h('div', { class: 'pb-tiles' },
-      tileX('Ibovespa no estresse', num(m('Ibovespa variação'), 2) + '%', 'de ' + dt(p.data_pre_estresse) + ' a ' + dt(p.data_estresse)),
-      tileX('Selic meta', num(m('Selic meta'), 2) + '%', 'Focus fim de 2026: ' + num(m('Focus Selic fim 2026'), 2) + '%'),
-      tileX('Dólar', 'R$ ' + num(m('Dólar comercial fechamento'), 2), 'variação no dia: ' + num(m('Dólar variação dia'), 2) + '% (as fontes divergem)'),
-      tileX('DI jan/31', num(m('DI jan/31'), 2) + '%', 'antes: ' + num(m('DI jan/31 ajuste anterior'), 2) + '%'));
-
-    var top = A.slice().sort(function (a, b) { return a.posicao - b.posicao; }).slice(0, 3);
-    var cTop = h('div', { class: 'pb-card' },
-      h('h2', null, 'Os 3 primeiros do score'),
-      h('p', { class: 'pb-note' }, 'Score de 0 a 1000 (desconto, solidez, qualidade e proventos). É uma classificação do dia, não uma promessa de retorno.'),
-      h('ol', { class: 'inv-resumo-lista' }, top.map(function (a) {
-        return h('li', null,
-          h('div', { class: 'l' }, h('b', null, a.posicao + 'º ' + a.ticker), h('span', null, a.nome), chipSinal(a.sinal), h('span', { class: 'pb-note' }, num(a.score, 0) + ' pontos · confiança ' + String(a.confianca || '—').toLowerCase())),
-          h('span', { class: 'pb-text' }, a.tese),
-          h('span', { class: 'm' }, 'Risco: ' + (a.risco || '—')),
-          h('div', null, h('button', { type: 'button', class: 'pb-btn', onclick: function () { PB.openAtivo(a.ticker); } }, 'Abrir ficha de ' + a.ticker)));
-      })));
-
-    var att = A.filter(function (a) { return ATENCAO.indexOf(a.sinal) >= 0; }).sort(function (a, b) { return ATENCAO.indexOf(a.sinal) - ATENCAO.indexOf(b.sinal) || a.posicao - b.posicao; });
-    var cAtt = h('div', { class: 'pb-card' },
-      h('h2', null, 'Precisam de atenção'),
-      h('p', { class: 'pb-note' }, 'Ativos que parecem baratos ou rendem bem, mas têm um risco que muda a conta. ' + att.length + ' de ' + A.length + '.'),
-      att.length ? h('ul', { class: 'inv-resumo-lista' }, att.map(function (a) {
-        return h('li', null,
-          h('div', { class: 'l' }, h('b', null, a.ticker), chipSinal(a.sinal), h('button', { type: 'button', class: 'pb-btn', onclick: function () { PB.openAtivo(a.ticker); } }, 'Ver ficha')),
-          h('span', { class: 'm' }, a.risco || a.tese || ''));
-      })) : h('p', { class: 'pb-note' }, 'Nenhum ativo com alerta neste momento.'));
+    // tabela principal: nota, indicação e o risco de cada ativo, ordenados pela nota
+    var filtrados = A.slice().sort(function (a, b) { return a.posicao - b.posicao; }).filter(function (a) {
+      return (!filtroFacil.classe || a.classe === filtroFacil.classe) && (!filtroFacil.soCompra || CANDIDATAS.indexOf(a.sinal) >= 0);
+    });
+    var chips = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Filtrar a tabela' });
+    [['', 'Todos'], ['Ação', 'Ações'], ['FII', 'FIIs']].forEach(function (c) {
+      chips.append(h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': String(filtroFacil.classe === c[0]), onclick: function () { filtroFacil.classe = c[0]; desenharResumo(); } }, c[1]));
+    });
+    chips.append(h('label', { class: 'inv-sim-opt', style: 'display:inline-flex;gap:.4rem;align-items:center' },
+      h('input', { type: 'checkbox', checked: filtroFacil.soCompra, onchange: function (e) { filtroFacil.soCompra = e.target.checked; desenharResumo(); } }),
+      h('span', null, 'Só candidatas à compra')));
+    var linhasT = filtrados.map(function (a) {
+      var cor = PB.sinalColor(a.sinal), corTxt = corInd(a.sinal);
+      return h('tr', null,
+        h('td', { class: 'l' },
+          h('button', { type: 'button', class: 'inv-link', onclick: function () { PB.openAtivo(a.ticker); }, 'aria-label': 'Abrir ficha de ' + a.ticker }, a.ticker), ' ', h('span', { class: 'm' }, a.nome),
+          h('div', { class: 'm' }, 'Risco: ' + (a.risco || '—'))),
+        h('td', null, h('b', null, num(a.score / 100, 1)), h('span', { class: 'pb-bar', style: 'width:' + (a.score / 1000 * 3) + 'rem;background:' + cor, 'aria-hidden': 'true' })),
+        h('td', { class: 'l' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt, title: (INDICACAO[a.sinal] || [])[1] || '' }, indicacao(a.sinal))),
+        h('td', { class: 'pb-hide-sm' }, 'R$ ' + num(a.preco_atual, 2)));
+    });
+    var cTab = h('div', { class: 'pb-card' },
+      h('h2', null, 'Notas e indicação'),
+      h('p', { class: 'pb-note' }, 'Nota de 0 a 10 (o score de 0 a 1000 dividido por 100). Do mais bem avaliado para o menos. Toque no código para ver a ficha.'),
+      chips,
+      h('p', { class: 'pb-note', role: 'status', 'aria-live': 'polite' }, filtrados.length + ' de ' + A.length + ' ativos'),
+      filtrados.length ? h('div', { class: 'pb-tablewrap' }, h('table', { class: 'pb-table inv-ez' }, h('caption', { class: 'inv-sr' }, 'Notas e indicação dos ativos'),
+        h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'l' }, 'Ativo e risco'), h('th', { scope: 'col' }, 'Nota'), h('th', { scope: 'col', class: 'l' }, 'Indicação'), h('th', { scope: 'col', class: 'pb-hide-sm' }, 'Preço'))),
+        h('tbody', null, linhasT)))
+        : h('p', { class: 'pb-note' }, 'Nenhum ativo com esse filtro. Escolha "Todos" ou desmarque "Só candidatas à compra".'),
+      h('p', { class: 'pb-disc' }, 'A indicação é uma leitura automática da classificação do modelo (desconto, solidez, qualidade e proventos), com base nos dados de ' + dt(p.data_ref) + '. Não é recomendação de compra ou venda: confira o risco de cada ativo e a ficha antes de decidir.'));
 
     var cCart = h('div', { class: 'pb-card', id: 'resumo-carteira' });
     var cd = null;
@@ -249,7 +301,7 @@
         h('button', { type: 'button', class: 'pb-btn', onclick: function () { irAvancado('metodo'); } }, 'Como o score é calculado')),
       h('p', { class: 'pb-disc' }, 'Material educacional; não é recomendação de investimento. Resultados passados não garantem resultados futuros. Os dados dependem das fontes e da data da coleta.'));
 
-    pagina.replaceChildren(frase, tiles, cTop, cAtt, cCart, cMais);
+    pagina.replaceChildren(faixa, cTab, cCart, cMais);
   }
   INV.aoMostrar('resumo', desenharResumo);
   if (W.dash && dash.onData) dash.onData(function () { if (PB.current === 'resumo') desenharResumo(); });
@@ -335,12 +387,104 @@
     return h('ul', { 'aria-label': 'Limitações da medida de risco' }, a.map(function (x) { return h('li', null, x); }));
   }
 
+  /* ---------- Avançado: ranking e cenário mais fáceis de filtrar (os dados são os mesmos; só some o que não importa agora) ---------- */
+  (function () {
+    var tab = document.getElementById('tabela'), busca = document.getElementById('busca');
+    if (!tab || !busca) return;
+    var tb = tab.querySelector('tbody'), card = tab.closest('.pb-card');
+    var colunas = lerPref().colunas === 'todas' ? 'todas' : 'essenciais';
+    var fSinal = '';
+    var estiloR = document.createElement('style');
+    estiloR.textContent = '.pb[data-cols="essenciais"] #tabela :is(th,td):is(:nth-child(4),:nth-child(6),:nth-child(7),:nth-child(8),:nth-child(9),:nth-child(10),:nth-child(13),:nth-child(15),:nth-child(17),:nth-child(18)){display:none}' +
+      '#tabela .inv-ind{white-space:nowrap}';
+    document.head.appendChild(estiloR);
+    raiz.setAttribute('data-cols', colunas);
+    var th = document.createElement('th'); th.className = 'l'; th.textContent = 'Indicação'; tab.querySelector('thead tr').appendChild(th);
+    var sel = h('select', { class: 'pb-in', id: 'filtro-sinal', 'aria-label': 'Filtrar por classificação' },
+      h('option', { value: '' }, 'Todas as classificações'),
+      Object.keys(PB.SINAL).map(function (k) { return h('option', { value: k }, PB.sinalName(k)); }));
+    var cont = h('span', { class: 'pb-note', role: 'status', 'aria-live': 'polite' });
+    var bCol = h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': String(colunas === 'todas') });
+    var bLimpar = h('button', { type: 'button', class: 'pb-btn' }, 'Limpar filtros');
+    function rotCol() { bCol.textContent = colunas === 'todas' ? 'Mostrando todas as colunas' : 'Mostrando colunas essenciais'; bCol.setAttribute('aria-pressed', String(colunas === 'todas')); }
+    rotCol();
+    var ctr = card.querySelector('.pb-controls');
+    ctr.append(sel, bCol, bLimpar, cont);
+    var ocupado = false;
+    function aplicar() {
+      if (ocupado) return; ocupado = true;
+      var d = dash.data('ativos'); var por = {};
+      if (d.status === 'ok') d.data.forEach(function (a) { por[a.ticker] = a; });
+      var n = 0, tot = 0;
+      [].forEach.call(tb.querySelectorAll('tr'), function (tr) {
+        var tk = tr.children[1] && tr.children[1].textContent.trim(), a = por[tk];
+        if (a && !tr.querySelector('.inv-ind')) {
+          var td = document.createElement('td'); td.className = 'l inv-ind'; td.textContent = indicacao(a.sinal); td.style.color = corInd(a.sinal); tr.appendChild(td);
+        }
+        tot++;
+        var ver = !fSinal || (a && a.sinal === fSinal);
+        tr.hidden = !ver; if (ver) n++;
+      });
+      cont.textContent = n + ' de ' + tot + ' ativos' + (n === 0 && tot ? ' — nenhum com esse filtro' : '');
+      ocupado = false;
+    }
+    new MutationObserver(aplicar).observe(tb, { childList: true });
+    sel.addEventListener('change', function () { fSinal = sel.value; aplicar(); });
+    bCol.addEventListener('click', function () {
+      colunas = colunas === 'todas' ? 'essenciais' : 'todas'; raiz.setAttribute('data-cols', colunas); rotCol();
+      gravarPref(function (u) { u.colunas = colunas; });
+    });
+    bLimpar.addEventListener('click', function () {
+      fSinal = ''; sel.value = ''; busca.value = '';
+      busca.dispatchEvent(new Event('input'));
+      var todos = card.querySelector('[data-classe=""]'); if (todos) todos.click();
+      aplicar();
+    });
+    PB.draws.push(aplicar);
+  })();
+
+  // cenário: filtro por tema na tabela do snapshot de mercado
+  (function () {
+    var tab = document.getElementById('tabela-macro'), busca = document.getElementById('busca-macro');
+    if (!tab || !busca) return;
+    var tb = tab.querySelector('tbody'), ctr = busca.parentElement;
+    var ROT = { juros: 'Juros', fiscal: 'Fiscal', eleicao: 'Política e eleição', inflacao: 'Inflação', cambio: 'Câmbio', bolsa: 'Bolsa', credito: 'Crédito', banco: 'Bancos', commodity: 'Commodities', acao: 'Ações' };
+    var ORDEM = ['eleicao', 'fiscal', 'juros', 'inflacao', 'cambio', 'bolsa', 'credito', 'banco', 'commodity', 'acao'];
+    var atual = '', botoes = {}, montado = false;
+    var cont = h('span', { class: 'pb-note', role: 'status', 'aria-live': 'polite' });
+    function montar() {
+      var d = dash.data('macro'); if (montado || d.status !== 'ok') return; montado = true;
+      var cats = ORDEM.filter(function (c) { return d.data.some(function (r) { return r.categoria === c; }); });
+      var grupo = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Filtrar por tema' });
+      [['', 'Todos']].concat(cats.map(function (c) { return [c, ROT[c] || c]; })).forEach(function (c) {
+        var b = h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': String(c[0] === '') }, c[1]);
+        b.addEventListener('click', function () { atual = c[0]; Object.keys(botoes).forEach(function (k) { botoes[k].setAttribute('aria-pressed', String(k === c[0])); }); aplicar(); });
+        botoes[c[0]] = b; grupo.appendChild(b);
+      });
+      ctr.after(grupo, cont);
+    }
+    var ocupado = false;
+    function aplicar() {
+      montar(); if (ocupado) return; ocupado = true;
+      var n = 0, tot = 0;
+      [].forEach.call(tb.querySelectorAll('tr'), function (tr) {
+        var ver = !atual || (tr.children[0] && tr.children[0].textContent.trim() === atual);
+        tr.hidden = !ver; tot++; if (ver) n++;
+      });
+      cont.textContent = n + ' de ' + tot + ' indicadores';
+      ocupado = false;
+    }
+    new MutationObserver(aplicar).observe(tb, { childList: true });
+    PB.draws.push(aplicar);
+  })();
+
   /* ---------- interface pública ---------- */
   W.INVModo = {
     atual: function () { return modo; },
     definir: definir,
     irAvancado: irAvancado,
     aoMudar: function (fn) { ouvintes.push(fn); },
+    indicacao: indicacao,
     cartaoRisco: cartaoRisco,
     cartaoConcentracao: cartaoConcentracao,
     // atributos para marcar elementos de outros módulos

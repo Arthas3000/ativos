@@ -53,11 +53,12 @@ O app do GitHub Pages (não o painel do Claude) organiza tudo em quatro áreas: 
 
 ### Modo Fácil e modo Avançado
 
-Um alternador na barra superior troca a **apresentação**, nunca os dados nem os cálculos (`invest-modo.js`; escolha guardada só no aparelho). Quem já tem transações começa no Avançado; os demais, no Fácil.
+Um botão de tema (claro/escuro, lembrado no aparelho; sem escolha, segue o sistema) fica ao lado do alternador. O alternador na barra superior troca a **apresentação**, nunca os dados nem os cálculos (`invest-modo.js`; escolha guardada só no aparelho). Quem já tem transações começa no Avançado; os demais, no Fácil.
 
 | Elemento | Fácil (2–5 min) | Avançado (15–20 min) |
 |---|---|---|
-| Mercado | aba **Resumo** (cenário, 3 primeiros, alertas com riscos, sua carteira) + Ranking, Ficha, Glossário | todas as abas |
+| Mercado | aba **Hoje**: cenário em 4 números e tabela única *Nota (0–10) · Indicação · Preço*, com o risco de cada ativo (filtros Todos/Ações/FIIs/só candidatas), mais Ficha e Glossário | todas as abas; Ranking com filtro por classificação, colunas essenciais/todas, busca e coluna Indicação; Cenário macro com filtro por tema |
+| Indicação | leitura da classificação (`sinal`): Candidata a compra, Compra com cautela, Boa mas sem desconto, Neutro, Atenção ao rendimento, Evitar; **não é recomendação** | a mesma indicação aparece no Ranking |
 | Risco do Simulador | nível, queda máxima e oscilação em frases, mais os avisos | tabela carteira × Ibovespa × CDI, fórmulas e limites |
 | Concentração | nível e frase | HHI, nº efetivo de ativos, maior posição, faixas |
 | Simulador | campos essenciais; “premissas em uso” em uma linha | todos os parâmetros, retorno por ativo, XIRR, lista de premissas |
