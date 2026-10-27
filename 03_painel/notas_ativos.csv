@@ -1,10 +1,10 @@
 ticker;nome;segmento;confianca;sinal;tese;risco;nota;travar
 CYRE3;Cyrela;Incorporação;Alta;oportunidade;ROE de 18% com P/L de 4,4 e margem de segurança de +17,5%;Ciclo de alta renda com DI a 15% · lançamentos −16% no 3T26;Caixa forte (liquidez corrente 3,37). Queda de 26/10 apagou toda a alta pós-1º turno.;
-LREN3;Lojas Renner;Varejo de moda;Alta;qualidade-sem-margem;Caixa líquido, ROIC de 23,5%, DY de 9,5% coberto;Guidance de receita cortado · Realize −55% · preço 18% acima do justo;Margem bruta recorde de 57,5% no 2T26. Caiu junto com varejo endividado.;
-PETR4;Petrobras;Petróleo e gás;Média;oportunidade-com-risco;P/L de 5,2, ROE de 27,7%, DL/EBITDA < 1x;Lucro em pico de Brent (~US$ 115) · ingerência pós-reeleição;Não caiu no estresse (+12% em 1 mês). Score vem de valuation, não de queda.;
+LREN3;Lojas Renner;Varejo de moda;Alta;qualidade-sem-margem;Caixa líquido, ROIC de 23,5%, DY de 9,5% coberto;Guidance de receita cortado · Realize −55% · justo 18% abaixo do preço;Margem bruta recorde de 57,5% no 2T26. Caiu junto com varejo endividado.;
+PETR4;Petrobras;Petróleo e gás;Média;oportunidade-com-risco;P/L de 5,2, ROE de 27,7%, DL/EBITDA < 1x;Lucro em pico de Brent (~US$ 115) · ingerência pós-reeleição;Caiu menos que o Ibovespa no estresse (−8,2% vs −13,9%) e subiu 12% em 1 mês. Score vem de valuation, não de queda.;
 KNCR11;Kinea Rendimentos;FII papel CDI;Média;qualidade-sem-margem;99% CDI a CDI+2%, sem eventos de crédito, alavancagem de 1,3%;Corte de Selic reduz rendimento · distribuição acima do FFO contábil;Ganha com juro alto: sensibilidade oposta à CYRE3.;
 B3SA3;B3;Infraestrutura financeira;Alta;qualidade-sem-margem;Caixa líquido, ROE de 28%, receita recorrente +17%;ADTV em queda · earnings yield de 7% abaixo do Ke;Queda de −36% desproporcional a negócio sem dívida.;
-ITUB4;Itaú Unibanco;Bancário;Alta;qualidade-sem-margem;NPL90 estável em 1,9% por 6 trimestres, ROE de 24%;P/VP de 2,21 acima do justo (1,33);Melhor banco do universo · cobertura de provisões N/D.;cresc|cet1|cobertura|npl90
+ITUB4;Itaú Unibanco;Bancário;Alta;qualidade-sem-margem;NPL90 estável em 1,9% por 6 trimestres, ROE de ~22% em 12 meses;P/VP de 2,21 acima do justo (1,33);Melhor banco do universo · cobertura de provisões N/D.;cresc|cet1|cobertura|npl90
 HGLG11;Pátria Log;FII logística;Alta;neutro;Vacância < 3%, 37 imóveis;Distribuição acima do FFO (87,8%) · FFO yield abaixo do CDI líquido;Gestão passou para a Pátria · aquisição do Pátio GRU em 22/10/2026.;
 ASAI3;Assaí;Atacarejo;Média;neutro;Desalavancagem (2,37x), lucro recorrente quase dobrou;Margem líquida de 1,2% · muito sensível a juros;Lucro do 2T26 diverge entre fontes (484 vs 537 mi).;dl_ebitda
 WEGE3;WEG;Bens de capital;Alta;qualidade-sem-margem;Melhor qualidade do universo, caixa líquido;P/L de 29,8 sem margem de segurança · DY recorrente de 1,95%;DY de 4,5% incluía dividendo de reserva parcelado até 2028.;dy_rec
@@ -16,6 +16,6 @@ RENT3;Localiza;Locação de veículos;Alta;neutro;Lucro +30% a/a, líder do seto
 HGBS11;Hedge Brasil Shopping;FII shopping;Alta;neutro;P/VP de 0,89, cap rate de 11,4%;Passivo de 18,7% dos ativos · liquidez menor;Escolhido no lugar de BCSC11 (ticker não localizado).;
 VISC11;Vinci Shopping Centers;FII shopping;Alta;risco-rendimento;P/VP de 0,90, 32 imóveis;FFO cobre só 68,7% da distribuição · passivo de 24,7%;Risco de corte de rendimento se o FFO não se mantiver.;
 BBAS3;Banco do Brasil;Bancário (estatal);Média;armadilha;P/VP de 0,55, CET1 de 11,3%;ROE de 8% abaixo do Ke · NPL 5,6% com cobertura caindo para 148%;Deterioração real, não desconto irracional. 3T26 em 11/11.;cresc|cet1|cobertura|npl90
-MGLU3;Magazine Luiza;Varejo;Alta;armadilha;Dívida líquida em queda (1,02x);Prejuízo · despesa financeira consome o EBIT;Armadilha provável enquanto o DI estiver perto de 15%.;dl_ebitda
+MGLU3;Magazine Luiza;Varejo;Alta;armadilha;Dívida líquida em queda (1,02x);Prejuízo no 2T26 · despesa financeira consome o EBIT;Armadilha provável enquanto o DI estiver perto de 15%.;dl_ebitda
 HAPV3;Hapvida;Saúde;Baixa;armadilha;EV/EBITDA de 3,5;Prejuízo, judicialização +60%, margem em queda;Já caía 87,7% em 12 meses antes da eleição. P/VP 0,04 é ilusório (PL é ágio).;ll3
 CSAN3;Cosan;Holding;Média;armadilha;Desinvestimentos em curso;Raízen em recuperação extrajudicial · holding cobre 0,2x o serviço da dívida;Valor do equity depende da Raízen.;

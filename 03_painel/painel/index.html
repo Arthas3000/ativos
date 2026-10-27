@@ -48,7 +48,7 @@
   [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
   .pb-fail { display: flex; align-items: center; justify-content: center; gap: .4rem; min-height: 8rem; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
   .pb-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
-  @media (max-width: 640px) { .pb-hide-sm { display: none; } }
+  @media (max-width: 640px) { .pb-hide-sm { display: none; } .pb-chip { white-space: normal; max-width: 100%; border-radius: 14px; } }
 </style>
 
 <div class="pb">
@@ -84,10 +84,10 @@
     <div class="pb-tiles">
       <div class="pb-card"><span class="pb-label">Ibovespa no estresse</span>
         <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=Ibovespa variação" data-v>—</span>%</span>
-        <span class="pb-note">fechamento 23/10 → 26/10</span></div>
+        <span class="pb-note">fechamento <span data-source="parametros" data-field="data_pre_estresse" data-row="0" data-fmt="dm" data-v>—</span> → <span data-source="parametros" data-field="data_estresse" data-row="0" data-fmt="dm" data-v>—</span></span></div>
       <div class="pb-card"><span class="pb-label">DI jan/31</span>
         <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=DI jan/31" data-v>—</span>%</span>
-        <span class="pb-note">antes: <span data-source="macro" data-field="valor" data-where="indicador=DI jan/31 ajuste anterior" data-v>—</span>% (23/10)</span></div>
+        <span class="pb-note">antes: <span data-source="macro" data-field="valor" data-where="indicador=DI jan/31 ajuste anterior" data-v>—</span>% (<span data-source="macro" data-field="data" data-where="indicador=DI jan/31 ajuste anterior" data-fmt="dm" data-v>—</span>)</span></div>
       <div class="pb-card"><span class="pb-label">Selic meta</span>
         <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=Selic meta" data-v>—</span>%</span>
         <span class="pb-note">Focus fim de 2026: <span data-source="macro" data-field="valor" data-where="indicador=Focus Selic fim 2026" data-v>—</span>%</span></div>
@@ -96,11 +96,11 @@
         <span class="pb-note">variação no dia: <span data-source="macro" data-field="valor" data-where="indicador=Dólar variação dia" data-v>—</span>% (fontes divergem)</span></div>
       <div class="pb-card"><span class="pb-label">IPCA 2026 (Focus)</span>
         <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=Focus IPCA 2026" data-v>—</span>%</span>
-        <span class="pb-note">pré-eleição</span></div>
+        <span class="pb-note"><span data-source="macro" data-field="obs" data-where="indicador=Focus IPCA 2026" data-v>—</span></span></div>
     </div>
 
     <div class="pb-card" id="sinais-card">
-      <h2>Como os 20 ativos se dividem</h2>
+      <h2>Como os <span id="sinais-n">—</span> ativos se dividem</h2>
       <p class="pb-note">Classificação qualitativa da análise, separada do score.</p>
       <div class="pb-chips" id="sinais" data-source="sinais"></div>
     </div>
@@ -150,7 +150,7 @@
             <th data-field="pvp"><button>P/VP</button></th>
             <th data-field="ms"><button>MS %</button></th>
             <th data-field="valor_justo" class="pb-hide-sm"><button>Justo R$</button></th>
-            <th data-field="vol_ratio" class="pb-hide-sm"><button>Volume ÷ média</button></th>
+            <th data-field="vol_ratio" class="pb-hide-sm"><button>Volume ÷ média de 20 pregões</button></th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -162,19 +162,19 @@
   <section class="pb-page" id="valor" data-page="valor" hidden>
     <div class="pb-card">
       <h2>Queda no estresse × margem de segurança (ações)</h2>
-      <p class="pb-note">Acima da linha zero o preço está abaixo do valor justo calculado. Mais à esquerda, maior a queda em 26/10. Cair muito não colocou quase nenhuma ação acima da linha.</p>
+      <p class="pb-note">Acima da linha zero o preço está abaixo do valor justo calculado. Mais à esquerda, maior a queda em <span data-source="parametros" data-field="data_estresse" data-row="0" data-fmt="dm" data-v>—</span>.</p>
       <div class="pb-legend" id="sinal-legend"></div>
-      <div class="pb-chart" id="scatter-acoes" data-source="ativos" style="min-height: 24rem"></div>
+      <div class="pb-chart" id="scatter-acoes" data-source="ativos parametros" style="min-height: 24rem"></div>
     </div>
     <div class="pb-grid">
       <div class="pb-card">
         <h2>Margem de segurança por ação</h2>
-        <p class="pb-note">Valor justo = P/VP justo (ROE, Ke, g) × valor patrimonial por ação. Barras limitadas a −100%.</p>
+        <p class="pb-note">Valor justo = P/VP justo (ROE, Ke, g) × valor patrimonial por ação. −100% = ROE normalizado ≤ g (<span data-source="parametros" data-field="g" data-row="0" data-dec="0" data-v>—</span>%): o modelo de valor justo não se aplica.</p>
         <div class="pb-chart" id="ms-bars" data-source="ativos" style="min-height: 22rem"></div>
       </div>
       <div class="pb-card">
         <h2>FIIs: P/VP × dividend yield</h2>
-        <p class="pb-note">Linha tracejada: CDI líquido de IR (<span data-source="parametros" data-field="cdi_liq" data-row="0" data-v>—</span>%). Círculo vazado: distribuição acima do FFO (cobertura &lt; 85%).</p>
+        <p class="pb-note">Linha tracejada: DI jan/28 líquido de IR (15%) (<span data-source="parametros" data-field="cdi_liq" data-row="0" data-v>—</span>%). Círculo vazado: FFO cobre menos de 85% da distribuição.</p>
         <div class="pb-chart" id="scatter-fiis" data-source="ativos parametros" style="min-height: 22rem"></div>
       </div>
     </div>
@@ -183,8 +183,8 @@
   <!-- PREÇOS -->
   <section class="pb-page" id="precos" data-page="precos" hidden>
     <div class="pb-card">
-      <h2>Preço em base 100 (25/09 = 100) contra o Ibovespa</h2>
-      <p class="pb-note">Mesma escala em todos os quadros. Linha cinza: Ibovespa. Tracejado vertical: dia do estresse. Ordem do ranking.</p>
+      <h2>Preço em base 100 (<span data-source="parametros" data-field="data_1m" data-row="0" data-fmt="dm" data-v>—</span> = 100) contra o Ibovespa</h2>
+      <p class="pb-note">Mesma escala em todos os quadros. Linha cinza: Ibovespa. Cor da linha = classificação (legenda em Valor × queda). Tracejado vertical: dia do estresse. Ordem do ranking.</p>
       <div class="pb-grid" id="multiples" data-source="precos ativos parametros" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr))"></div>
     </div>
   </section>
@@ -214,7 +214,7 @@
   <section class="pb-page" id="macro" data-page="macro" hidden>
     <div class="pb-card">
       <h2>Snapshot de mercado</h2>
-      <p class="pb-note">Indicadores coletados na data da versão, com fonte e grau de confiança.</p>
+      <p class="pb-note">Indicadores do snapshot de <span data-source="parametros" data-field="data_macro" data-row="0" data-v>—</span>, com fonte e grau de confiança.</p>
       <div class="pb-controls"><input class="pb-in" id="busca-macro" type="search" placeholder="Filtrar" aria-label="Filtrar indicadores"></div>
       <div class="pb-tablewrap">
         <table class="pb-table" id="tabela-macro" data-source="macro" data-row-key="indicador">
@@ -259,15 +259,15 @@
         <div class="pb-kv">
           <div><span class="pb-label">Custo de capital (Ke)</span><b><span data-source="parametros" data-field="ke" data-row="0" data-v>—</span>%</b></div>
           <div><span class="pb-label">Crescimento perpétuo (g)</span><b><span data-source="parametros" data-field="g" data-row="0" data-v>—</span>%</b></div>
-          <div><span class="pb-label">CDI líquido (FIIs)</span><b><span data-source="parametros" data-field="cdi_liq" data-row="0" data-v>—</span>%</b></div>
+          <div><span class="pb-label">DI jan/28 líquido de IR (15%), FIIs</span><b><span data-source="parametros" data-field="cdi_liq" data-row="0" data-v>—</span>%</b></div>
           <div><span class="pb-label">Data da versão</span><b><span data-source="parametros" data-field="data_versao" data-row="0" data-v>—</span></b></div>
         </div>
       </div>
       <div class="pb-card"><h3>Como ler o score</h3>
-        <p class="pb-text">P1 mede desconto contra o valor justo e queda ajustada pela qualidade. P2 mede alavancagem, liquidez e lucro sobre preço. P3 mede ROE, eficiência, crescimento e consistência. P4 mede dividend yield e se ele é coberto pelo lucro. Dado ausente não vale zero: o peso é redistribuído no pilar.</p>
+        <p class="pb-text">P1 mede desconto contra o valor justo e queda ajustada pela qualidade; 90 dos seus 300 pontos vêm da tendência do lucro (ROE do último trimestre anualizado ÷ ROE de 12 meses). P2 mede alavancagem, liquidez e lucro sobre preço. P3 mede ROE, eficiência, crescimento e consistência. P4 mede dividend yield e se ele é coberto pelo lucro. Estatais perdem 15 pontos em P3 (governança e ingerência). Os FIIs usam outros critérios: P/VP ajustado pela cobertura do FFO, FFO yield contra o DI líquido, vacância ou qualidade do crédito e venda de ativos. Dado ausente não vale zero: o peso é redistribuído no pilar.</p>
       </div>
       <div class="pb-card"><h3>Valor justo</h3>
-        <p class="pb-text">P/VP justo = (ROE − g) ÷ (Ke − g). Margem de segurança = P/VP justo ÷ P/VP atual − 1. Em petróleo e mineração usa-se o ROE de 12 meses, sem anualizar o trimestre de pico.</p>
+        <p class="pb-text">P/VP justo = (ROE − g) ÷ (Ke − g). Margem de segurança = P/VP justo ÷ P/VP atual − 1. Em petróleo e mineração usa-se o ROE de 12 meses, sem anualizar o trimestre de pico. Nas demais, o ROE normalizado é a média do ROE de 12 meses e do último trimestre anualizado.</p>
       </div>
     </div>
     <p class="pb-disc">Este painel tem finalidade exclusivamente educacional e informativa. Não constitui recomendação individualizada de compra, venda ou manutenção de ativos financeiros, nem substitui uma análise adequada ao perfil, aos objetivos e à tolerância ao risco de cada investidor. Os dados e indicadores estão sujeitos a alterações, e resultados passados não garantem resultados futuros. As pontuações dependem das premissas, dos critérios e da qualidade das informações disponíveis na data da análise.</p>
@@ -280,6 +280,10 @@ window.PB = (() => {
   const f0 = nf(0), f1 = nf(1), f2 = nf(2);
   const num = (x, d = 2) => (x === null || x === undefined || Number.isNaN(+x)) ? '—' : nf(d).format(+x);
   const sig = (x, d = 2) => (x === null || x === undefined) ? '—' : (x > 0 ? '+' : '') + nf(d).format(+x);
+  const dataBR = (v, dm) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v));
+    return m ? (dm ? m[3] + '/' + m[2] : m[3] + '/' + m[2] + '/' + m[1]) : String(v);
+  };
   const cls = (x) => x === null || x === undefined ? '' : x > 0 ? 'pos' : x < 0 ? 'neg' : '';
   const SINAL = {
     'oportunidade': ['Oportunidade', 0], 'oportunidade-com-risco': ['Oportunidade com risco', 1],
@@ -334,7 +338,7 @@ window.PB = (() => {
     dash.setLink(tab);
     PB.redraw();
   };
-  return { nf, f0, f1, f2, num, sig, cls, SINAL, sinalColor, sinalName, PILARES, visible, tipFor, cleanAxis, state,
+  return { nf, f0, f1, f2, num, sig, cls, dataBR, SINAL, sinalColor, sinalName, PILARES, visible, tipFor, cleanAxis, state,
     show, openAtivo, get current() { return current; }, get selected() { return selected; }, set selected(v) { selected = v; },
     draws: [], redraw() { PB.draws.forEach((fn) => fn()); } };
 })();
@@ -391,7 +395,9 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
     const d = dash.data(el.dataset.source);
     if (d.status !== 'ok') return;
     const r = find(d.data, el), v = r ? r[el.dataset.field] : null;
-    el.textContent = v === null || v === undefined ? '—' : typeof v === 'number' ? PB.num(v, DEC[el.dataset.field] ?? 2) : String(v);
+    const dec = el.dataset.dec !== undefined ? +el.dataset.dec : DEC[el.dataset.field] ?? 2;
+    el.textContent = v === null || v === undefined ? '—' : typeof v === 'number' ? PB.num(v, dec)
+      : el.dataset.field.startsWith('data') ? PB.dataBR(v, el.dataset.fmt === 'dm') : String(v);
     el.classList.remove('dash-skeleton');
   }));
 })();
@@ -409,7 +415,8 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
 
   const drawSinais = () => {
     const box = document.getElementById('sinais');
-    const d = dash.data('sinais');
+    const d = dash.data('sinais'), at = dash.data('ativos');
+    if (at.status === 'ok') document.getElementById('sinais-n').textContent = at.data.length;
     if (d.status !== 'ok') { box.replaceChildren(); return; }
     const order = Object.keys(PB.SINAL);
     box.replaceChildren(...[...d.data].sort((a, b) => order.indexOf(a.sinal) - order.indexOf(b.sinal)).map((r) => {
@@ -440,7 +447,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
       const item = (label, el) => { const w = document.createElement('div'); const l = document.createElement('span'); l.className = 'pb-label'; l.textContent = label; const b = document.createElement('b'); b.append(el); w.append(l, b); return w; };
       if (a.ms !== null && a.ms !== undefined) kv.append(item('Margem de segurança', mk('span', 'ms', PB.sig(a.ms, 1) + '%', PB.cls(a.ms))));
       else kv.append(item('P/VP', mk('span', 'pvp', PB.num(a.pvp))));
-      kv.append(item('DY 12m', mk('span', 'dy', PB.num(a.dy) + '%')), item('Estresse', mk('span', 'var_estresse', PB.sig(a.var_estresse) + '%', PB.cls(a.var_estresse))));
+      kv.append(item(a.dy_recorrente ? 'DY 12m (recorrente)' : 'DY 12m', mk('span', 'dy', PB.num(a.dy) + '%')), item('Estresse', mk('span', 'var_estresse', PB.sig(a.var_estresse) + '%', PB.cls(a.var_estresse))));
       const tese = mk('p', 'tese', a.tese, 'pb-text'); const risco = mk('p', 'risco', 'Risco: ' + a.risco, 'pb-note');
       const open = document.createElement('button'); open.className = 'pb-btn'; open.textContent = 'Abrir ' + a.ticker;
       open.addEventListener('click', () => PB.openAtivo(a.ticker));
@@ -501,7 +508,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
   const fmt = {
     posicao: (v) => String(v), score: (v) => PB.num(v, 1), p1: (v) => PB.num(v, 0), p2: (v) => PB.num(v, 0), p3: (v) => PB.num(v, 0), p4: (v) => PB.num(v, 0),
     preco_atual: (v) => PB.num(v), var_estresse: (v) => PB.sig(v), var_1m: (v) => PB.sig(v), dy: (v) => PB.num(v), pvp: (v) => PB.num(v),
-    ms: (v) => PB.sig(v, 1), valor_justo: (v) => PB.num(v), vol_ratio: (v) => PB.num(v, 1) + 'x'
+    ms: (v) => PB.sig(v, 1), valor_justo: (v) => v === 0 ? 'n/a (ROE ≤ g)' : PB.num(v), vol_ratio: (v) => PB.num(v, 1) + 'x'
   };
   table.querySelectorAll('th button').forEach((b) => b.addEventListener('click', () => {
     const k = b.parentElement.dataset.field;
@@ -559,9 +566,11 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
       .attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', 'var(--cds-chart-grid)');
   };
 
+  const justo = (r) => r.valor_justo === 0 ? 'n/a (ROE ≤ g)' : 'R$ ' + PB.num(r.valor_justo);
   const scatterAcoes = () => {
     const box = document.getElementById('scatter-acoes');
-    if (!PB.visible(box) || !PB.state(box, 'ativos')) return;
+    if (!PB.visible(box) || !PB.state(box, 'ativos', 'parametros')) return;
+    const par = dash.data('parametros').data[0];
     const rows = dash.data('ativos').data.filter((a) => a.classe === 'Ação' && a.ms !== null);
     const W = box.clientWidth, H = 380, m = { l: 52, r: 16, t: 12, b: 40 };
     const x = d3.scaleLinear(d3.extent([0, ...rows.map((r) => r.var_estresse)]), [m.l, W - m.r]).nice();
@@ -572,12 +581,12 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
     svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat((d) => d + '%')).call(PB.cleanAxis);
     svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
     svg.append('text').attr('x', W - m.r).attr('y', y(0) - 6).attr('text-anchor', 'end').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('valor justo');
-    svg.append('text').attr('x', m.l).attr('y', H - 4).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Variação 23/10 → 26/10');
-    svg.append('text').attr('transform', `translate(12,${m.t}) rotate(90)`).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Margem de segurança');
+    svg.append('text').attr('x', m.l).attr('y', H - 4).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Variação ' + PB.dataBR(par.data_pre_estresse, true) + ' → ' + PB.dataBR(par.data_estresse, true));
+    svg.append('text').attr('transform', `translate(14,${H - m.b}) rotate(-90)`).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Margem de segurança');
     const tip = PB.tipFor(box);
     const g = svg.append('g').selectAll('g').data(rows).join('g').attr('transform', (r) => `translate(${x(r.var_estresse)},${y(Math.max(-100, r.ms))})`)
       .style('cursor', 'pointer').on('click', (ev, r) => PB.openAtivo(r.ticker))
-      .on('mousemove', (ev, r) => tip.show(ev, [[r.ticker + ' · ' + r.nome], ['Estresse', PB.sig(r.var_estresse) + '%'], ['Margem de segurança', PB.sig(r.ms, 1) + '%'], ['Preço / justo', 'R$ ' + PB.num(r.preco_atual) + ' / R$ ' + PB.num(r.valor_justo)], ['Score', PB.num(r.score, 1)]]))
+      .on('mousemove', (ev, r) => tip.show(ev, [[r.ticker + ' · ' + r.nome], ['Estresse', PB.sig(r.var_estresse) + '%'], ['Margem de segurança', PB.sig(r.ms, 1) + '%'], ['Preço / justo', 'R$ ' + PB.num(r.preco_atual) + ' / ' + justo(r)], ['Score', PB.num(r.score, 1)]]))
       .on('mouseleave', tip.hide);
     g.append('circle').attr('r', 6).attr('fill', (r) => PB.sinalColor(r.sinal));
     g.append('text').attr('x', 9).attr('dy', '0.35em').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((r) => r.ticker);
@@ -599,7 +608,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
       svg.append('rect').attr('x', Math.min(x(0), x(v))).attr('width', Math.abs(x(v) - x(0))).attr('y', y(r.ticker)).attr('height', y.bandwidth()).attr('rx', 4)
         .attr('fill', v > 0 ? dash.colors[0] : 'var(--cds-chart-muted)').style('cursor', 'pointer')
         .on('click', () => PB.openAtivo(r.ticker))
-        .on('mousemove', (ev) => tip.show(ev, [[r.ticker], ['Margem de segurança', PB.sig(r.ms, 1) + '%'], ['Preço', 'R$ ' + PB.num(r.preco_atual)], ['Valor justo', 'R$ ' + PB.num(r.valor_justo)], ['ROE normalizado', PB.num(r.roe_n, 1) + '%']]))
+        .on('mousemove', (ev) => tip.show(ev, [[r.ticker], ['Margem de segurança', PB.sig(r.ms, 1) + '%'], ['Preço', 'R$ ' + PB.num(r.preco_atual)], ['Valor justo', justo(r)], ['ROE normalizado', PB.num(r.roe_n, 1) + '%']]))
         .on('mouseleave', tip.hide);
       svg.append('text').attr('x', m.l - 6).attr('y', y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(r.ticker);
       svg.append('text').attr('x', W - m.r + 6).attr('y', y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em').attr('fill', r.ms > 0 ? 'var(--color-ok)' : 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text(PB.sig(r.ms, 0) + '%');
@@ -661,7 +670,6 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
       card.append(h, c);
       return card;
     }));
-    const est2 = new Date(dash.data('parametros').data[0].data_ref);
     box.querySelectorAll('.pb-chart').forEach((c, i) => {
       const a = ativos[i];
       const pts = (byT.get(a.ticker) || []).map((p) => ({ d: new Date(p.data), v: p.base100, c: p.fechamento }));
@@ -669,7 +677,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
       const x = d3.scaleUtc(xDom, [m.l, W - m.r]), y = d3.scaleLinear(yDom, [H - m.b, m.t]);
       const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
       svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(100)).attr('y2', y(100)).attr('stroke', 'var(--cds-chart-grid)');
-      svg.append('line').attr('x1', x(est2)).attr('x2', x(est2)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
+      svg.append('line').attr('x1', x(est)).attr('x2', x(est)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
       const line = d3.line().x((p) => x(p.d)).y((p) => y(p.v));
       svg.append('path').attr('d', line(ibov)).attr('fill', 'none').attr('stroke', 'var(--cds-chart-muted)').attr('stroke-width', 1.5);
       svg.append('path').attr('d', line(pts)).attr('fill', 'none').attr('stroke', PB.sinalColor(a.sinal) === 'var(--cds-chart-muted)' ? dash.colors[0] : PB.sinalColor(a.sinal))
@@ -717,7 +725,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
     h.append(sTk, ' · ');
     const sc = document.createElement('span'); sc.dataset.source = 'ativos'; sc.dataset.field = 'score'; sc.dataset.where = 'ticker=' + T; sc.textContent = PB.num(a.score, 1); h.append(sc);
     const sub = document.createElement('div'); sub.className = 'pb-label';
-    sub.textContent = a.nome + ' · ' + a.segmento + ' · ' + a.posicao + 'º de ' + rows.length + ' · ' + a.status + ' · cobertura ' + PB.num(a.cobertura, 0) + '%';
+    sub.textContent = a.nome + ' · ' + a.segmento + ' · ' + a.posicao + 'º de ' + rows.length + ' · ' + a.status + ' · dados ' + PB.num(a.cobertura, 0) + '%';
     const chip = document.createElement('span'); chip.className = 'pb-chip';
     const dot = document.createElement('i'); dot.style.background = PB.sinalColor(a.sinal); chip.append(dot, PB.sinalName(a.sinal) + ' · confiança ' + a.confianca.toLowerCase());
     const mkP = (field, text, cls) => { const p = document.createElement('p'); p.className = cls; p.dataset.source = 'ativos'; p.dataset.field = field; p.dataset.where = 'ticker=' + T; p.textContent = text; return p; };
@@ -733,20 +741,20 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
     add('Variação no estresse', 'var_estresse', PB.sig(a.var_estresse) + '%', PB.cls(a.var_estresse));
     add('Variação em 1 mês', 'var_1m', PB.sig(a.var_1m) + '%', PB.cls(a.var_1m));
     add('Queda do pico de 3 meses', 'queda_pico', PB.sig(a.queda_pico) + '%', PB.cls(a.queda_pico));
-    add('Volume no estresse ÷ média', 'vol_ratio', PB.num(a.vol_ratio, 1) + 'x');
-    add('DY 12m', 'dy', PB.num(a.dy) + '%');
+    add('Volume no estresse ÷ média de 20 pregões', 'vol_ratio', PB.num(a.vol_ratio, 1) + 'x');
+    add(a.dy_recorrente ? 'DY 12m (recorrente)' : 'DY 12m', 'dy', PB.num(a.dy) + '%');
     add('P/VP', 'pvp', PB.num(a.pvp));
     add('Patrimônio líquido', 'patrimonio_bi', 'R$ ' + PB.num(a.patrimonio_bi) + ' bi');
     if (a.classe === 'Ação') {
-      add('P/L', 'pl_ratio', PB.num(a.pl_ratio));
+      add(a.pl_recorrente ? 'P/L (lucro recorrente)' : 'P/L', 'pl_ratio', PB.num(a.pl_ratio));
       add('EV/EBITDA', 'ev_ebitda', PB.num(a.ev_ebitda));
       add('ROE 12m', 'roe', PB.num(a.roe) + '%');
       add('ROE normalizado', 'roe_n', PB.num(a.roe_n) + '%');
       add('Margem líquida', 'margem_liq', a.margem_liq === null ? '—' : PB.num(a.margem_liq, 1) + '%');
       add('Earnings yield', 'earnings_yield', PB.num(a.earnings_yield) + '%');
       add('Payout', 'payout', a.payout === null ? '—' : PB.num(a.payout, 0) + '%');
-      add(a.alavancagem_tipo, 'alavancagem', PB.num(a.alavancagem));
-      add('Valor justo', 'valor_justo', 'R$ ' + PB.num(a.valor_justo));
+      add(a.alavancagem_tipo, 'alavancagem', PB.num(a.alavancagem) + (a.alavancagem_tipo === 'CET1 %' ? '%' : ''));
+      add('Valor justo', 'valor_justo', a.valor_justo === 0 ? 'n/a (ROE ≤ g)' : 'R$ ' + PB.num(a.valor_justo));
       add('Margem de segurança', 'ms', PB.sig(a.ms, 1) + '%', PB.cls(a.ms));
       if (a.npl90 !== null) add('Inadimplência 90d', 'npl90', PB.num(a.npl90, 1) + '%');
       if (a.npl90 !== null) add('Cobertura de provisões', 'cobertura_pdd', a.cobertura_pdd === null ? 'N/D' : PB.num(a.cobertura_pdd, 1) + '%');
@@ -789,22 +797,26 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
       const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
       svg.append('g').selectAll('line').data(y.ticks(4)).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', 'var(--cds-chart-grid)');
       svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 110))).tickFormat(d3.utcFormat('%d/%m'))).call(PB.cleanAxis);
-      svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((d) => 'R$ ' + PB.num(d, 0))).call(PB.cleanAxis);
+      const yt = y.ticks(4), casas = d3.precisionFixed(yt.length > 1 ? Math.abs(yt[1] - yt[0]) : 1);
+      svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((d) => 'R$ ' + PB.num(d, casas))).call(PB.cleanAxis);
       const gid = 'pbgrad';
       const grad = svg.append('defs').append('linearGradient').attr('id', gid).attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 1);
       [[0, .26], [.25, .16], [.5, .08], [.75, .03], [1, 0]].forEach(([o, op]) => grad.append('stop').attr('offset', o).attr('style', `stop-color:${dash.colors[0]};stop-opacity:${op}`));
       svg.append('path').attr('d', d3.area().x((p) => x(p.d)).y0(H - m.b).y1((p) => y(p.v))(pts)).attr('fill', `url(#${gid})`);
       svg.append('path').attr('d', d3.line().x((p) => x(p.d)).y((p) => y(p.v))(pts)).attr('fill', 'none').attr('stroke', dash.colors[0]).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
-      const keys = [['1 mês', a.preco_1m], ['1 semana', a.preco_1s], ['Pré-estresse', a.preco_pre], ['Estresse', a.preco_atual]];
+      const keys = [['1 mês', a.preco_1m], ['1 semana', a.preco_1s], ['Pré-estresse', a.preco_pre], ['Estresse', a.preco_estresse]];
       const dates = [par.data_1m, par.data_1s, par.data_pre_estresse, par.data_estresse];
-      keys.forEach(([lab, v], i) => {
-        const dd = dates[i] ? new Date(dates[i]) : null; if (!dd) return;
-        svg.append('circle').attr('cx', x(dd)).attr('cy', y(v)).attr('r', 4).attr('fill', 'var(--color-panel)').attr('stroke', dash.colors[1]).attr('stroke-width', 2);
-      });
       const tip = PB.tipFor(pc); const bis = d3.bisector((p) => p.d).center;
       svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
         .on('mousemove', (ev) => { const p = pts[bis(pts, x.invert(d3.pointer(ev)[0]))]; if (p) tip.show(ev, [[d3.utcFormat('%d/%m/%Y')(p.d)], [T, 'R$ ' + PB.num(p.v)]]); })
         .on('mouseleave', tip.hide);
+      keys.forEach(([lab, v], i) => {
+        const dd = dates[i] ? new Date(dates[i]) : null; if (!dd || v === null || v === undefined) return;
+        svg.append('circle').attr('cx', x(dd)).attr('cy', y(v)).attr('r', 4).attr('fill', 'var(--color-panel)').attr('stroke', dash.colors[1]).attr('stroke-width', 2)
+          .style('cursor', 'default')
+          .on('mousemove', (ev) => tip.show(ev, [[lab + ' · ' + d3.utcFormat('%d/%m/%Y')(dd)], ['Fechamento', 'R$ ' + PB.num(v)]]))
+          .on('mouseleave', tip.hide);
+      });
       pc.replaceChildren(svg.node(), ...pc.querySelectorAll('.pb-tip'));
     }
   };
@@ -824,7 +836,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
     const cols = [...mt.querySelectorAll('th')].map((th) => th.dataset.field);
     mb.replaceChildren(...d.data.filter((r) => !q || Object.values(r).join(' ').toLowerCase().includes(q)).map((r) => {
       const tr = document.createElement('tr');
-      cols.forEach((k) => { const td = document.createElement('td'); td.className = k === 'valor' ? '' : 'l' + (k === 'fonte' || k === 'obs' ? ' pb-hide-sm' : ''); td.textContent = r[k] ?? ''; tr.append(td); });
+      cols.forEach((k) => { const td = document.createElement('td'); td.className = k === 'valor' ? '' : 'l' + (k === 'fonte' || k === 'obs' ? ' pb-hide-sm' : ''); td.textContent = PB.dataBR(r[k] ?? ''); tr.append(td); });
       return tr;
     }));
   };

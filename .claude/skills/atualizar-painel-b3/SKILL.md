@@ -39,7 +39,7 @@ Comandos rodam na raiz do projeto. No Windows, `python`.
    ```bash
    python 03_painel/atualizar.py nova-versao
    ```
-2. **Preços** (Yahoo, 3 meses):
+2. **Preços** (Yahoo; a janela começa em `data_pre_estresse` − 45 dias ou hoje − 100 dias, o que for mais antigo):
    ```bash
    python 03_painel/atualizar.py precos
    ```
@@ -53,7 +53,7 @@ Comandos rodam na raiz do projeto. No Windows, `python`.
    - `data_ref`: último pregão fechado. Não use pregão em andamento.
    - `data_1m`: pregão de cerca de 1 mês antes.
    - `data_1s`: pregão de cerca de 1 semana antes.
-   As datas de estresse só mudam se o usuário confirmou um evento novo. Nesse caso, `var_stress` em `dados_entrada.csv` precisa ser recalculado para todos os ativos (fechamento pré → estresse), e `fii_mediana` vira a mediana dos FIIs.
+   As datas de estresse só mudam se o usuário confirmou um evento novo. Nesse caso, `var_stress` em `dados_entrada.csv` precisa ser recalculado para todos os ativos (fechamento pré → estresse), e `fii_mediana` vira a mediana dos FIIs. Revise também as constantes fixas de `02_etapa2_score/score.py`: `IBOV_STRESS` (queda do Ibovespa no evento, deve bater com o `var_estresse` do ^BVSP) e `CDI_LIQ` (DI jan/28 do dia do evento × 0,85, líquido de IR). O `teste` confere `var_stress` do CSV, `fii_mediana` e `IBOV_STRESS` contra os preços do Yahoo e avisa se o preço do CSV (Fundamentus) diverge mais de 0,5% do fechamento.
 3. **Fundamentos automáticos** (Fundamentus):
    ```bash
    python 03_painel/atualizar.py fundamentus --nao-aplicar

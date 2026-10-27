@@ -9,7 +9,7 @@ Lula (PT) foi reeleito em 25/10/2026 com 51,79% dos votos válidos, contra 48,21
 | Ativo | Movimento em 26/10/2026 |
 |---|---|
 | Ibovespa | −13,88%, 176.608 pts. Circuit breaker na abertura, o primeiro desde mar/2020. Mínima de 169.516 pts. |
-| Dólar comercial | R$ 5,40 no fechamento (+8,25% pela B3). Pico intradiário perto de R$ 5,60. |
+| Dólar comercial | R$ 5,40 no fechamento (+8,25% pela B3; as fontes divergem, o Money Times aponta +0,92%, e a PTAX ainda precisa ser checada). Pico intradiário perto de R$ 5,60. |
 | DI jan/28 | 12,86% → 14,80% (+194 bps) |
 | DI jan/31 | 12,64% → 15,19% (+254 bps). Pico intradiário de 15,94%. |
 | Curva vs. Selic | Selic em 13,75%. A curva passou a precificar manutenção em nov e **altas** em dez e jan. |

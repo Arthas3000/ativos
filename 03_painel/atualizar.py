@@ -61,12 +61,22 @@ def num(v):
 
 
 # ---------------------------------------------------------------- precos (Yahoo)
+def janela_precos(c, hoje):
+    """Inicio da janela baixada do Yahoo: o mais antigo entre (data_pre_estresse - 45 dias) e (hoje - 100 dias).
+    Assim o dia pre-estresse e os 20 pregoes anteriores (media de volume) nunca saem da serie."""
+    return min(dt.date.fromisoformat(c["data_pre_estresse"]) - dt.timedelta(days=45), hoje - dt.timedelta(days=100))
+
+
 def cmd_precos():
     tickers = [r["ticker"] for r in read_csv(ENTRADA)] + ["^BVSP"]
     out = {}
+    agora = dt.datetime.now(BRT)
+    ini = janela_precos(cfg(), agora.date())
+    p1 = int(dt.datetime.combine(ini, dt.time(0, 0), tzinfo=BRT).timestamp())
+    p2 = int(agora.timestamp())
     for t in tickers:
         sym = t if t.startswith("^") else t + ".SA"
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=3mo&interval=1d"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?period1={p1}&period2={p2}&interval=1d"
         r = json.load(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30))["chart"]["result"][0]
         q = r["indicators"]["quote"][0]
         rows = [{"d": dt.datetime.fromtimestamp(ts, BRT).date().isoformat(), "o": q["open"][i], "h": q["high"][i],
@@ -186,12 +196,14 @@ def price_stats(rows, c):
     ref, m, s = on_or_before(rows, c["data_ref"]), on_or_before(rows, c["data_1m"]), on_or_before(rows, c["data_1s"])
     pre, st = on_or_before(rows, c["data_pre_estresse"]), on_or_before(rows, c["data_estresse"])
     upto = [r for r in rows if r["d"] <= c["data_ref"]]
-    peak = max(upto, key=lambda r: r["c"])
+    # pico dos ultimos 3 meses (92 dias corridos): a janela baixada e maior para garantir o dia pre-estresse
+    ini3m = (dt.date.fromisoformat(c["data_ref"]) - dt.timedelta(days=92)).isoformat()
+    peak = max((r for r in upto if r["d"] > ini3m), key=lambda r: r["c"])
     i = upto.index(st)
     prev = [r["v"] or 0 for r in upto[max(0, i - 20):i]]
     pct = lambda a, b: round((b / a - 1) * 100, 2)
     return {"preco_1m": round(m["c"], 2), "preco_1s": round(s["c"], 2), "preco_pre": round(pre["c"], 2),
-            "preco_estresse_min": round(st["l"], 2), "preco_atual": round(ref["c"], 2),
+            "preco_estresse_min": round(st["l"], 2), "preco_estresse": round(st["c"], 2), "preco_atual": round(ref["c"], 2),
             "var_estresse": pct(pre["c"], st["c"]), "var_1m": pct(m["c"], ref["c"]),
             "queda_pico": pct(peak["c"], ref["c"]), "data_pico": peak["d"],
             "vol_ratio": round((st["v"] or 0) / (sum(prev) / len(prev)), 1) if prev and sum(prev) else None}
@@ -229,7 +241,10 @@ def cmd_build():
                        patrimonio_bi=r2(num(e["plf"]) / 1e9), vp_cota=r2(num(e["plf"]) / num(e["cotas"])))
         else:
             lev = e["dl_pl"] if e["tipo"] == "incorporadora" else e["dl_ebitda"]
-            row.update(dy=num(e["dy_rec"]) if e["dy_rec"] else num(e["dy"]), pl_ratio=num(e["pe"]),
+            pl_rec = bool(num(e["ll12_rec"]))      # lucro recorrente oficial substitui o contabil (score.stock)
+            row.update(dy=num(e["dy_rec"]) if e["dy_rec"] else num(e["dy"]), dy_recorrente=bool(e["dy_rec"]),
+                       # com ll12_rec, o P/L exibido e o recorrente (= 1 / earnings yield), coerente com EY e payout
+                       pl_ratio=round(1 / x["ey"], 2) if pl_rec and x["ey"] else num(e["pe"]), pl_recorrente=pl_rec,
                        ev_ebitda=f.get("ev_ebitda"), margem_liq=f.get("margem_liq"),
                        roe=r2(x["roe12"], 100), roe_n=r2(x["roen"], 100), ms=r2(x["ms"], 100),
                        valor_justo=r2(x["pvp_just"] * num(e["preco"]) / num(e["pvp"])) if num(e["pvp"]) else None,
@@ -242,12 +257,16 @@ def cmd_build():
                 row.update(alavancagem=num(e["cet1"]), margem_liq=None)   # Fundamentus mostra 0% para bancos
         ativos.append(row)
 
+    # precos.json (graficos de Precos e do Ativo): ultimos 3 meses (92 dias corridos), como antes, e sempre
+    # a partir de data_pre_estresse - 10 dias se ela for mais antiga. Pico e volume medio nao dependem desta serie.
+    corte = min((dt.date.fromisoformat(c["data_ref"]) - dt.timedelta(days=92)).isoformat(),
+                (dt.date.fromisoformat(c["data_pre_estresse"]) - dt.timedelta(days=10)).isoformat())
     serie = []
     for t in list(ent) + ["^BVSP"]:
         rows = precos[t]["rows"]
         b = on_or_before(rows, c["data_1m"])["c"]
         serie += [{"ticker": "IBOV" if t == "^BVSP" else t, "data": r["d"], "fechamento": round(r["c"], 2),
-                   "base100": round(r["c"] / b * 100, 2)} for r in rows if r["d"] <= c["data_ref"]]
+                   "base100": round(r["c"] / b * 100, 2)} for r in rows if corte <= r["d"] <= c["data_ref"]]
 
     macro = []
     for r in read_csv(ROOT / c["macro_csv"]):
@@ -275,6 +294,8 @@ def cmd_build():
     meta = {k: c[k] for k in ("versao", "data_versao", "data_ref", "data_1m", "data_1s", "evento",
                                "data_pre_estresse", "data_estresse")}
     meta.update(ke=score.KE * 100, g=score.G * 100, cdi_liq=round(score.CDI_LIQ, 2))
+    m = re.search(r"(\d{4}-\d{2}-\d{2})", Path(c["macro_csv"]).name)      # snapshot_mercado_<data>.csv
+    meta["data_macro"] = m.group(1) if m else c["data_ref"]
     for name, data in {"ativos": ativos, "precos": serie, "macro": macro, "sensibilidade": sens,
                        "historico": historico, "parametros": [meta]}.items():
         (OUT / f"{name}.json").write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -499,6 +520,40 @@ def teste_historico():
     print("ok: parsers do historico longo e index da raiz")
 
 
+def teste_precos_e_score(ent, ativos):
+    """Janela de precos cobre o dia pre-estresse + 20 pregoes; score (CSV manual) bate com os precos do Yahoo."""
+    c = cfg()
+    precos = json.loads((SCORE / "precos_yahoo_3m.json").read_text(encoding="utf-8"))
+    pre, est = c["data_pre_estresse"], c["data_estresse"]
+    for t, v in precos.items():
+        datas = [r["d"] for r in v["rows"]]
+        assert pre in datas and est in datas, (
+            f"{t}: precos_yahoo_3m.json nao tem {pre} (pre-estresse) e/ou {est} (estresse). "
+            f"Rode 'precos' de novo: a janela baixada tem de comecar antes de data_pre_estresse")
+        antes = sum(1 for d in datas if d < pre)
+        assert antes >= 20, (f"{t}: so {antes} pregoes antes de {pre} em precos_yahoo_3m.json (precisa de 20 para a media "
+                             f"de volume). Rode 'precos' de novo com janela maior")
+    por = {a["ticker"]: a for a in ativos}
+    for r in ent:
+        a = por[r["ticker"]]
+        d = abs(float(r["var_stress"]) - a["var_estresse"])
+        assert d < 0.01, (f"{r['ticker']}: var_stress do CSV ({r['var_stress']}) difere do var_estresse do Yahoo "
+                          f"({a['var_estresse']}); atualize dados_entrada.csv (o score usa o do CSV)")
+        if abs(float(r["preco"]) / a["preco_atual"] - 1) > 0.005:
+            print(f"AVISO: {r['ticker']}: preco do CSV/Fundamentus ({r['preco']}) difere {abs(float(r['preco']) / a['preco_atual'] - 1) * 100:.1f}% "
+                  f"do fechamento do Yahoo em {c['data_ref']} ({a['preco_atual']}); valor justo e DY dos FIIs usam o do CSV")
+    ib = price_stats(precos["^BVSP"]["rows"], c)["var_estresse"]
+    assert abs(score.IBOV_STRESS - ib) < 0.01, (
+        f"score.IBOV_STRESS ({score.IBOV_STRESS}) difere do var_estresse do ^BVSP ({ib}); revise a constante em score.py")
+    fiis = sorted(a["var_estresse"] for a in ativos if a["classe"] == "FII")
+    med = (fiis[(len(fiis) - 1) // 2] + fiis[len(fiis) // 2]) / 2
+    for r in ent:
+        if r["classe"] == "FII":
+            assert abs(float(r["fii_mediana"]) - med) < 0.011, (
+                f"{r['ticker']}: fii_mediana do CSV ({r['fii_mediana']}) difere da mediana dos FIIs ({med:.2f})")
+    print(f"ok: janela de precos, var_stress do CSV e IBOV_STRESS ({score.IBOV_STRESS}) batem com o Yahoo")
+
+
 def cmd_teste():
     ent, nts = read_csv(ENTRADA), notas()
     ativos = json.loads((OUT / "ativos.json").read_text(encoding="utf-8"))
@@ -510,6 +565,7 @@ def cmd_teste():
     assert br("1.234,5%") == 1234.5 and br("-") is None and norm("Cotação") == "cotacao"
     assert pick(["P/L", "6,91", "Lucro Líquido", "1", "Lucro Líquido", "2"], "Lucro Líquido", 1) == "2"
     print(f"ok: {len(ativos)} ativos consistentes")
+    teste_precos_e_score(ent, ativos)
     teste_historico()
 
 
