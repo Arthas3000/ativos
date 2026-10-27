@@ -1,0 +1,4 @@
+__pycache__/
+*.tmp
+.model-router/
+.claude/settings.local.json

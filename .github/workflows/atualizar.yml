@@ -1,0 +1,40 @@
+# Atualização manual do Painel B3: preços (Yahoo) + fundamentos (Fundamentus) + score + app.
+# Dados de pesquisa manual (bancos, Vale, WEG, crédito dos FIIs, macro) continuam pela skill atualizar-painel-b3 no Claude.
+# Rode depois do fechamento do pregão (18h de Brasília). O botão "Atualizar dados" do app abre esta página.
+name: Atualizar painel
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: atualizar-painel
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Nova versão com preços e fundamentos
+        run: |
+          python 03_painel/atualizar.py nova-versao
+          python 03_painel/atualizar.py precos
+          python 03_painel/atualizar.py auto-datas
+          python 03_painel/atualizar.py fundamentus
+          python 03_painel/atualizar.py build
+          python 03_painel/atualizar.py teste
+          python 03_painel/atualizar.py site
+          python 03_painel/atualizar.py snapshot
+      - name: Gravar no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Atualização automática $(jq -r .versao 03_painel/config.json) ($(date -u +%F))"
+          git push

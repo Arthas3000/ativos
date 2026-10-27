@@ -1,0 +1,892 @@
+<style>
+  .pb { display: grid; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); font-variant-numeric: tabular-nums; }
+  .pb-head { display: grid; gap: var(--cds-gap-xs); }
+  .pb-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .pb-lede { color: var(--color-fg-muted); margin: 0; max-width: 75ch; }
+  .pb-meta { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .pb-tabs { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); border-bottom: 1px solid var(--color-border-line); padding-bottom: var(--cds-pad-xs); }
+  .pb-tab { font: inherit; background: none; border: 1px solid transparent; border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); color: var(--color-fg-muted); cursor: pointer; }
+  .pb-tab[aria-selected="true"] { color: var(--color-fg); border-color: var(--color-border-line); background: var(--color-panel); }
+  .pb-tab:focus-visible, .pb-btn:focus-visible, .pb-in:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+  .pb-page { display: grid; gap: var(--cds-gap-md); }
+  .pb-grid { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
+  .pb-tiles { display: grid; gap: var(--cds-gap-md); grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+  .pb-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: grid; gap: var(--cds-gap-sm); align-content: start; min-width: 0; }
+  .pb-card h2, .pb-card h3 { margin: 0; font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
+  .pb-note { margin: 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .pb-big { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); line-height: 1.1; }
+  .pb-label { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .pb-chart { position: relative; min-width: 0; }
+  .pb-chart svg { display: block; overflow: visible; }
+  .pb-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); max-width: 18rem; z-index: 2; }
+  .pb-tip .k { color: var(--cds-text-secondary); }
+  .pb-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .pb-sw { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; margin-right: .3rem; vertical-align: -1px; }
+  .pb-chip { display: inline-flex; align-items: center; gap: .35rem; border: 1px solid var(--color-border-line); border-radius: 999px; padding: 1px var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; }
+  .pb-chip i { width: .5rem; height: .5rem; border-radius: 50%; display: inline-block; }
+  .pb-chips { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); }
+  .pb-tablewrap { overflow: auto; max-height: 34rem; }
+  .pb-table { border-collapse: collapse; width: 100%; font-size: var(--cds-font-size-caption); }
+  .pb-table th, .pb-table td { padding: var(--cds-pad-xs) var(--cds-pad-sm); border-bottom: 1px solid var(--color-border-line); text-align: right; white-space: nowrap; }
+  .pb-table th { position: sticky; top: 0; background: var(--color-panel); z-index: 1; font-weight: var(--cds-font-weight-medium); }
+  .pb-table th button { all: unset; cursor: pointer; }
+  .pb-table .l { text-align: left; }
+  .pb-table tr[data-key] { cursor: pointer; }
+  .pb-table tbody tr:hover { background: var(--color-bg); }
+  .pb-bar { display: inline-block; height: .5rem; border-radius: 4px; background: var(--cds-chart-muted); vertical-align: middle; margin-left: .4rem; }
+  .pb-controls { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; }
+  .pb-in, .pb-btn { font: inherit; font-size: var(--cds-font-size-caption); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); background: var(--color-bg); color: var(--color-fg); }
+  .pb-btn { cursor: pointer; }
+  .pb-btn[aria-pressed="true"] { background: var(--color-panel); border-color: var(--color-fg-muted); }
+  .pb-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: var(--cds-gap-sm); }
+  .pb-kv div { display: grid; gap: 2px; }
+  .pb-kv b { font-weight: var(--cds-font-weight-medium); }
+  .pb-text { margin: 0; max-width: 70ch; }
+  .pos { color: var(--color-ok); } .neg { color: var(--color-bad); } .warn { color: var(--color-warn); }
+  .pb-disc { color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); max-width: 90ch; margin: 0; }
+  [data-dash-source-state=empty] { color: transparent; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+  .pb-fail { display: flex; align-items: center; justify-content: center; gap: .4rem; min-height: 8rem; color: var(--color-fg-muted); font-size: var(--cds-font-size-caption); }
+  .pb-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+  @media (max-width: 640px) { .pb-hide-sm { display: none; } }
+</style>
+
+<div class="pb">
+  <header class="pb-head" id="topo">
+    <h1 class="pb-title">Painel de Oportunidades B3</h1>
+    <p class="pb-lede" id="takeaway">
+      Líder do score: <b data-source="ativos" data-field="ticker" data-where="posicao=1" class="dash-skeleton" data-v>—</b>
+      com <b data-source="ativos" data-field="score" data-where="posicao=1" class="dash-skeleton" data-v>—</b> pontos.
+      Com custo de capital de <b data-source="parametros" data-field="ke" data-row="0" data-v>—</b>%,
+      só <b data-source="margem_positiva" data-field="n" data-row="0" data-v>—</b> ações estão abaixo do valor justo
+      (<span data-source="margem_positiva" data-field="tickers" data-row="0" data-v>—</span>).
+    </p>
+    <div class="pb-meta">
+      Versão <span data-source="parametros" data-field="versao" data-row="0" data-v>—</span> ·
+      preços de <span data-source="parametros" data-field="data_ref" data-row="0" data-v>—</span> ·
+      evento de estresse: <span data-source="parametros" data-field="evento" data-row="0" data-v>—</span>
+    </div>
+  </header>
+
+  <nav class="pb-tabs" role="tablist" aria-label="Seções do painel">
+    <button class="pb-tab" role="tab" data-tab="geral" aria-selected="true">Visão geral</button>
+    <button class="pb-tab" role="tab" data-tab="ranking">Ranking</button>
+    <button class="pb-tab" role="tab" data-tab="valor">Valor × queda</button>
+    <button class="pb-tab" role="tab" data-tab="precos">Preços</button>
+    <button class="pb-tab" role="tab" data-tab="ativo">Ativo</button>
+    <button class="pb-tab" role="tab" data-tab="macro">Macro</button>
+    <button class="pb-tab" role="tab" data-tab="historico">Histórico</button>
+    <button class="pb-tab" role="tab" data-tab="metodo">Método</button>
+  </nav>
+
+  <!-- VISÃO GERAL -->
+  <section class="pb-page" id="geral" data-page="geral">
+    <div class="pb-tiles">
+      <div class="pb-card"><span class="pb-label">Ibovespa no estresse</span>
+        <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=Ibovespa variação" data-v>—</span>%</span>
+        <span class="pb-note">fechamento 23/10 → 26/10</span></div>
+      <div class="pb-card"><span class="pb-label">DI jan/31</span>
+        <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=DI jan/31" data-v>—</span>%</span>
+        <span class="pb-note">antes: <span data-source="macro" data-field="valor" data-where="indicador=DI jan/31 ajuste anterior" data-v>—</span>% (23/10)</span></div>
+      <div class="pb-card"><span class="pb-label">Selic meta</span>
+        <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=Selic meta" data-v>—</span>%</span>
+        <span class="pb-note">Focus fim de 2026: <span data-source="macro" data-field="valor" data-where="indicador=Focus Selic fim 2026" data-v>—</span>%</span></div>
+      <div class="pb-card"><span class="pb-label">Dólar comercial</span>
+        <span class="pb-big">R$ <span data-source="macro" data-field="valor" data-where="indicador=Dólar comercial fechamento" data-v>—</span></span>
+        <span class="pb-note">variação no dia: <span data-source="macro" data-field="valor" data-where="indicador=Dólar variação dia" data-v>—</span>% (fontes divergem)</span></div>
+      <div class="pb-card"><span class="pb-label">IPCA 2026 (Focus)</span>
+        <span class="pb-big"><span data-source="macro" data-field="valor" data-where="indicador=Focus IPCA 2026" data-v>—</span>%</span>
+        <span class="pb-note">pré-eleição</span></div>
+    </div>
+
+    <div class="pb-card" id="sinais-card">
+      <h2>Como os 20 ativos se dividem</h2>
+      <p class="pb-note">Classificação qualitativa da análise, separada do score.</p>
+      <div class="pb-chips" id="sinais" data-source="sinais"></div>
+    </div>
+
+    <div class="pb-grid" id="top3">
+      <div class="pb-card" data-pos="1"></div>
+      <div class="pb-card" data-pos="2"></div>
+      <div class="pb-card" data-pos="3"></div>
+    </div>
+
+    <div class="pb-card" id="ranking-chart-card">
+      <h2>Score por pilar</h2>
+      <p class="pb-note">0 a 1000 pontos: desconto (P1, até 300), solidez (P2, até 250), qualidade (P3, até 250) e proventos (P4, até 200). Clique numa barra para abrir o ativo.</p>
+      <div class="pb-legend" id="pilar-legend"></div>
+      <div class="pb-chart" id="ranking-chart" data-source="ativos" style="min-height: 30rem"></div>
+    </div>
+  </section>
+
+  <!-- RANKING -->
+  <section class="pb-page" id="ranking" data-page="ranking" hidden>
+    <div class="pb-card">
+      <h2>Todos os ativos</h2>
+      <p class="pb-note">Clique no cabeçalho para ordenar e numa linha para abrir o ativo. MS = margem de segurança contra o valor justo (só ações).</p>
+      <div class="pb-controls">
+        <input class="pb-in" id="busca" type="search" placeholder="Buscar ticker, nome ou setor" aria-label="Buscar">
+        <button class="pb-btn" data-classe="" aria-pressed="true">Todos</button>
+        <button class="pb-btn" data-classe="Ação" aria-pressed="false">Ações</button>
+        <button class="pb-btn" data-classe="FII" aria-pressed="false">FIIs</button>
+      </div>
+      <div class="pb-tablewrap">
+        <table class="pb-table" id="tabela" data-source="ativos" data-row-key="ticker">
+          <thead><tr>
+            <th data-field="posicao"><button>#</button></th>
+            <th data-field="ticker" class="l"><button>Ticker</button></th>
+            <th data-field="nome" class="l pb-hide-sm"><button>Nome</button></th>
+            <th data-field="segmento" class="l pb-hide-sm"><button>Segmento</button></th>
+            <th data-field="score"><button>Score</button></th>
+            <th data-field="p1" class="pb-hide-sm"><button>P1</button></th>
+            <th data-field="p2" class="pb-hide-sm"><button>P2</button></th>
+            <th data-field="p3" class="pb-hide-sm"><button>P3</button></th>
+            <th data-field="p4" class="pb-hide-sm"><button>P4</button></th>
+            <th data-field="confianca" class="l"><button>Confiança</button></th>
+            <th data-field="preco_atual"><button>Preço R$</button></th>
+            <th data-field="var_estresse"><button>Estresse %</button></th>
+            <th data-field="var_1m"><button>1 mês %</button></th>
+            <th data-field="dy"><button>DY %</button></th>
+            <th data-field="pvp"><button>P/VP</button></th>
+            <th data-field="ms"><button>MS %</button></th>
+            <th data-field="valor_justo" class="pb-hide-sm"><button>Justo R$</button></th>
+            <th data-field="vol_ratio" class="pb-hide-sm"><button>Volume ÷ média</button></th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- VALOR × QUEDA -->
+  <section class="pb-page" id="valor" data-page="valor" hidden>
+    <div class="pb-card">
+      <h2>Queda no estresse × margem de segurança (ações)</h2>
+      <p class="pb-note">Acima da linha zero o preço está abaixo do valor justo calculado. Mais à esquerda, maior a queda em 26/10. Cair muito não colocou quase nenhuma ação acima da linha.</p>
+      <div class="pb-legend" id="sinal-legend"></div>
+      <div class="pb-chart" id="scatter-acoes" data-source="ativos" style="min-height: 24rem"></div>
+    </div>
+    <div class="pb-grid">
+      <div class="pb-card">
+        <h2>Margem de segurança por ação</h2>
+        <p class="pb-note">Valor justo = P/VP justo (ROE, Ke, g) × valor patrimonial por ação. Barras limitadas a −100%.</p>
+        <div class="pb-chart" id="ms-bars" data-source="ativos" style="min-height: 22rem"></div>
+      </div>
+      <div class="pb-card">
+        <h2>FIIs: P/VP × dividend yield</h2>
+        <p class="pb-note">Linha tracejada: CDI líquido de IR (<span data-source="parametros" data-field="cdi_liq" data-row="0" data-v>—</span>%). Círculo vazado: distribuição acima do FFO (cobertura &lt; 85%).</p>
+        <div class="pb-chart" id="scatter-fiis" data-source="ativos parametros" style="min-height: 22rem"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PREÇOS -->
+  <section class="pb-page" id="precos" data-page="precos" hidden>
+    <div class="pb-card">
+      <h2>Preço em base 100 (25/09 = 100) contra o Ibovespa</h2>
+      <p class="pb-note">Mesma escala em todos os quadros. Linha cinza: Ibovespa. Tracejado vertical: dia do estresse. Ordem do ranking.</p>
+      <div class="pb-grid" id="multiples" data-source="precos ativos parametros" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr))"></div>
+    </div>
+  </section>
+
+  <!-- ATIVO -->
+  <section class="pb-page" id="ativo" data-page="ativo" hidden>
+    <div class="pb-controls">
+      <label for="sel-ativo" class="pb-label">Ativo</label>
+      <select class="pb-in" id="sel-ativo" data-source="ativos" aria-label="Escolher ativo"></select>
+    </div>
+    <div class="pb-grid">
+      <div class="pb-card" id="ativo-resumo"></div>
+      <div class="pb-card">
+        <h3>Pontos por pilar</h3>
+        <div class="pb-chart" id="ativo-pilares" data-source="ativos" style="min-height: 9rem"></div>
+      </div>
+    </div>
+    <div class="pb-card">
+      <h3>Fechamento diário</h3>
+      <p class="pb-note">Pontos: 1 mês antes, 1 semana antes, pré-estresse e estresse.</p>
+      <div class="pb-chart" id="ativo-preco" data-source="precos ativos parametros" style="min-height: 16rem"></div>
+    </div>
+    <div class="pb-card" id="ativo-indicadores"></div>
+  </section>
+
+  <!-- MACRO -->
+  <section class="pb-page" id="macro" data-page="macro" hidden>
+    <div class="pb-card">
+      <h2>Snapshot de mercado</h2>
+      <p class="pb-note">Indicadores coletados na data da versão, com fonte e grau de confiança.</p>
+      <div class="pb-controls"><input class="pb-in" id="busca-macro" type="search" placeholder="Filtrar" aria-label="Filtrar indicadores"></div>
+      <div class="pb-tablewrap">
+        <table class="pb-table" id="tabela-macro" data-source="macro" data-row-key="indicador">
+          <thead><tr>
+            <th data-field="categoria" class="l">Categoria</th>
+            <th data-field="indicador" class="l">Indicador</th>
+            <th data-field="valor">Valor</th>
+            <th data-field="unidade" class="l">Unidade</th>
+            <th data-field="data" class="l">Data</th>
+            <th data-field="fonte" class="l pb-hide-sm">Fonte</th>
+            <th data-field="confianca" class="l">Confiança</th>
+            <th data-field="obs" class="l pb-hide-sm">Observação</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- HISTÓRICO -->
+  <section class="pb-page" id="historico" data-page="historico" hidden>
+    <div class="pb-card">
+      <h2>Score por versão</h2>
+      <p class="pb-note">Cada atualização vira uma versão. As anteriores ficam guardadas em 03_painel/historico/.</p>
+      <div class="pb-tablewrap">
+        <table class="pb-table" id="tabela-hist" data-source="historico_pivot" data-row-key="ticker">
+          <thead><tr></tr></thead><tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="pb-card">
+      <h2>Robustez do ranking</h2>
+      <p class="pb-note">Posição de cada ativo em 6 cenários (pesos dos pilares e custo de capital). Quanto mais escuro, melhor a posição.</p>
+      <div class="pb-chart" id="heatmap" data-source="sensibilidade" style="min-height: 30rem"></div>
+    </div>
+  </section>
+
+  <!-- MÉTODO -->
+  <section class="pb-page" id="metodo" data-page="metodo" hidden>
+    <div class="pb-grid">
+      <div class="pb-card"><h3>Parâmetros</h3>
+        <div class="pb-kv">
+          <div><span class="pb-label">Custo de capital (Ke)</span><b><span data-source="parametros" data-field="ke" data-row="0" data-v>—</span>%</b></div>
+          <div><span class="pb-label">Crescimento perpétuo (g)</span><b><span data-source="parametros" data-field="g" data-row="0" data-v>—</span>%</b></div>
+          <div><span class="pb-label">CDI líquido (FIIs)</span><b><span data-source="parametros" data-field="cdi_liq" data-row="0" data-v>—</span>%</b></div>
+          <div><span class="pb-label">Data da versão</span><b><span data-source="parametros" data-field="data_versao" data-row="0" data-v>—</span></b></div>
+        </div>
+      </div>
+      <div class="pb-card"><h3>Como ler o score</h3>
+        <p class="pb-text">P1 mede desconto contra o valor justo e queda ajustada pela qualidade. P2 mede alavancagem, liquidez e lucro sobre preço. P3 mede ROE, eficiência, crescimento e consistência. P4 mede dividend yield e se ele é coberto pelo lucro. Dado ausente não vale zero: o peso é redistribuído no pilar.</p>
+      </div>
+      <div class="pb-card"><h3>Valor justo</h3>
+        <p class="pb-text">P/VP justo = (ROE − g) ÷ (Ke − g). Margem de segurança = P/VP justo ÷ P/VP atual − 1. Em petróleo e mineração usa-se o ROE de 12 meses, sem anualizar o trimestre de pico.</p>
+      </div>
+    </div>
+    <p class="pb-disc">Este painel tem finalidade exclusivamente educacional e informativa. Não constitui recomendação individualizada de compra, venda ou manutenção de ativos financeiros, nem substitui uma análise adequada ao perfil, aos objetivos e à tolerância ao risco de cada investidor. Os dados e indicadores estão sujeitos a alterações, e resultados passados não garantem resultados futuros. As pontuações dependem das premissas, dos critérios e da qualidade das informações disponíveis na data da análise.</p>
+  </section>
+</div>
+
+<script>
+window.PB = (() => {
+  const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const f0 = nf(0), f1 = nf(1), f2 = nf(2);
+  const num = (x, d = 2) => (x === null || x === undefined || Number.isNaN(+x)) ? '—' : nf(d).format(+x);
+  const sig = (x, d = 2) => (x === null || x === undefined) ? '—' : (x > 0 ? '+' : '') + nf(d).format(+x);
+  const cls = (x) => x === null || x === undefined ? '' : x > 0 ? 'pos' : x < 0 ? 'neg' : '';
+  const SINAL = {
+    'oportunidade': ['Oportunidade', 0], 'oportunidade-com-risco': ['Oportunidade com risco', 1],
+    'qualidade-sem-margem': ['Qualidade sem margem', 2], 'neutro': ['Neutro', -1],
+    'risco-rendimento': ['Risco no rendimento', 4], 'armadilha': ['Armadilha', -2]
+  };
+  const sinalColor = (s) => {
+    const i = (SINAL[s] || ['', -1])[1];
+    return i === -1 ? 'var(--cds-chart-muted)' : i === -2 ? 'var(--cds-chart-status-critical)' : dash.colors[i];
+  };
+  const sinalName = (s) => (SINAL[s] || [s])[0];
+  const PILARES = [['p1', 'P1 desconto', 300], ['p2', 'P2 solidez', 250], ['p3', 'P3 qualidade', 250], ['p4', 'P4 proventos', 200]];
+  const visible = (el) => el && el.offsetParent !== null && el.clientWidth > 0;
+  const tipFor = (box) => {
+    let t = box.querySelector('.pb-tip');
+    if (!t) { t = document.createElement('div'); t.className = 'pb-tip'; t.hidden = true; box.appendChild(t); }
+    return {
+      show(ev, lines) {
+        t.replaceChildren(...lines.map(([k, v], i) => {
+          const d = document.createElement('div');
+          if (i === 0) { d.className = 'k'; d.textContent = k; } else { d.textContent = k + ': ' + v; }
+          return d;
+        }));
+        t.hidden = false;
+        const r = box.getBoundingClientRect();
+        let x = ev.clientX - r.left + 12, y = ev.clientY - r.top + 12;
+        const w = t.offsetWidth, h = t.offsetHeight;
+        if (x + w > box.clientWidth) x = Math.max(0, ev.clientX - r.left - w - 12);
+        if (y + h > box.clientHeight) y = Math.max(0, ev.clientY - r.top - h - 12);
+        t.style.left = x + 'px'; t.style.top = y + 'px';
+      },
+      hide() { t.hidden = true; }
+    };
+  };
+  const cleanAxis = (g) => g.attr('font-size', null).attr('font-family', null)
+    .call((s) => s.selectAll('text').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)'))
+    .call((s) => s.selectAll('line,path').attr('stroke', 'var(--cds-chart-axis)'));
+  const fail = (box) => { box.replaceChildren(); const d = document.createElement('div'); d.className = 'pb-fail'; d.textContent = 'Falha ao carregar'; box.appendChild(d); };
+  const state = (box, ...ids) => {
+    const st = ids.map((id) => dash.data(id).status);
+    if (st.includes('error') || st.includes('connect')) { fail(box); box.classList.remove('dash-skeleton'); return false; }
+    if (st.some((s) => s !== 'ok')) { box.replaceChildren(); box.classList.add('dash-skeleton'); return false; }
+    box.classList.remove('dash-skeleton');
+    return true;
+  };
+  let current = 'geral', selected = null;
+  const openAtivo = (t) => { selected = t; show('ativo'); };
+  const show = (tab) => {
+    current = tab;
+    document.querySelectorAll('.pb-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+    document.querySelectorAll('[data-page]').forEach((p) => { p.hidden = p.dataset.page !== tab; });
+    dash.setLink(tab);
+    PB.redraw();
+  };
+  return { nf, f0, f1, f2, num, sig, cls, SINAL, sinalColor, sinalName, PILARES, visible, tipFor, cleanAxis, state,
+    show, openAtivo, get current() { return current; }, get selected() { return selected; }, set selected(v) { selected = v; },
+    draws: [], redraw() { PB.draws.forEach((fn) => fn()); } };
+})();
+
+dash.calc('margem_positiva', {
+  inputs: ['ativos'],
+  title: 'Ações abaixo do valor justo',
+  description: 'Conta as ações com margem de segurança positiva e lista os tickers.',
+  fn: (ativos) => {
+    const sel = ativos.filter((a) => a.ms !== null && a.ms > 0);
+    return [{ n: sel.length, tickers: sel.map((a) => a.ticker).join(', ') }];
+  }
+});
+dash.calc('sinais', {
+  inputs: ['ativos'],
+  title: 'Ativos por classificação',
+  description: 'Quantos ativos há em cada classificação qualitativa (sinal).',
+  fn: (ativos) => {
+    const m = new Map();
+    ativos.forEach((a) => m.set(a.sinal, (m.get(a.sinal) || 0) + 1));
+    return [...m].map(([sinal, n]) => ({ sinal, n, tickers: ativos.filter((a) => a.sinal === sinal).map((a) => a.ticker).join(', ') }));
+  }
+});
+dash.calc('historico_pivot', {
+  inputs: ['historico'],
+  title: 'Score por versão',
+  description: 'Uma linha por ativo, uma coluna de score por versão e a variação entre as duas últimas.',
+  fn: (historico) => {
+    const vs = [...new Set(historico.map((h) => h.versao))].sort((a, b) => +a.slice(1) - +b.slice(1));
+    const by = d3.group(historico, (h) => h.ticker);
+    return [...by].map(([ticker, hs]) => {
+      const row = { ticker };
+      vs.forEach((v) => { const h = hs.find((x) => x.versao === v); row[v] = h ? h.score : null; });
+      const a = row[vs[vs.length - 2]], b = row[vs[vs.length - 1]];
+      row.delta = a !== undefined && a !== null && b !== null ? Math.round((b - a) * 10) / 10 : null;
+      const last = hs.find((x) => x.versao === vs[vs.length - 1]);
+      row.posicao = last ? last.posicao : null;
+      return row;
+    }).sort((x, y) => (x.posicao ?? 99) - (y.posicao ?? 99));
+  }
+});
+
+document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', () => PB.show(b.dataset.tab)));
+
+// Preenche os números fixos marcados com data-v (topo, tiles, parâmetros)
+(() => {
+  const DEC = { ke: 1, g: 1, cdi_liq: 2, score: 1, n: 0 };
+  const find = (rows, el) => {
+    if (el.dataset.row !== undefined) return rows[+el.dataset.row];
+    const p = [...new URLSearchParams(el.dataset.where || '')];
+    return rows.find((r) => p.every(([k, v]) => String(r[k]) === v));
+  };
+  PB.draws.push(() => document.querySelectorAll('[data-v]').forEach((el) => {
+    const d = dash.data(el.dataset.source);
+    if (d.status !== 'ok') return;
+    const r = find(d.data, el), v = r ? r[el.dataset.field] : null;
+    el.textContent = v === null || v === undefined ? '—' : typeof v === 'number' ? PB.num(v, DEC[el.dataset.field] ?? 2) : String(v);
+    el.classList.remove('dash-skeleton');
+  }));
+})();
+
+</script>
+
+<script>
+// Visão geral: sinais, top 3, score por pilar
+(() => {
+  const legend = document.getElementById('pilar-legend');
+  legend.replaceChildren(...PB.PILARES.map(([, name], i) => {
+    const s = document.createElement('span'); const sw = document.createElement('i');
+    sw.className = 'pb-sw'; sw.style.background = dash.colors[i]; s.append(sw, name); return s;
+  }));
+
+  const drawSinais = () => {
+    const box = document.getElementById('sinais');
+    const d = dash.data('sinais');
+    if (d.status !== 'ok') { box.replaceChildren(); return; }
+    const order = Object.keys(PB.SINAL);
+    box.replaceChildren(...[...d.data].sort((a, b) => order.indexOf(a.sinal) - order.indexOf(b.sinal)).map((r) => {
+      const c = document.createElement('span'); c.className = 'pb-chip'; c.title = r.tickers;
+      const dot = document.createElement('i'); dot.style.background = PB.sinalColor(r.sinal);
+      const n = document.createElement('b'); n.textContent = r.n;
+      c.append(dot, PB.sinalName(r.sinal) + ': ', n, ' · ' + r.tickers);
+      return c;
+    }));
+  };
+
+  const drawTop3 = () => {
+    const d = dash.data('ativos');
+    document.querySelectorAll('#top3 [data-pos]').forEach((card) => {
+      const pos = +card.dataset.pos;
+      if (d.status !== 'ok') { card.classList.add('dash-skeleton'); card.replaceChildren(); return; }
+      card.classList.remove('dash-skeleton');
+      const a = d.data.find((x) => x.posicao === pos);
+      if (!a) { card.replaceChildren(); return; }
+      const mk = (tag, field, text, cls) => {
+        const e = document.createElement(tag); e.dataset.source = 'ativos'; e.dataset.field = field;
+        e.dataset.where = 'posicao=' + pos; e.textContent = text; if (cls) e.className = cls; return e;
+      };
+      const head = document.createElement('div'); head.className = 'pb-label'; head.textContent = pos + 'º no score · ' + a.segmento + ' · confiança ' + a.confianca.toLowerCase();
+      const t = document.createElement('div'); t.className = 'pb-big';
+      t.append(mk('span', 'ticker', a.ticker), ' ', mk('span', 'score', PB.num(a.score, 1)));
+      const kv = document.createElement('div'); kv.className = 'pb-kv';
+      const item = (label, el) => { const w = document.createElement('div'); const l = document.createElement('span'); l.className = 'pb-label'; l.textContent = label; const b = document.createElement('b'); b.append(el); w.append(l, b); return w; };
+      if (a.ms !== null && a.ms !== undefined) kv.append(item('Margem de segurança', mk('span', 'ms', PB.sig(a.ms, 1) + '%', PB.cls(a.ms))));
+      else kv.append(item('P/VP', mk('span', 'pvp', PB.num(a.pvp))));
+      kv.append(item('DY 12m', mk('span', 'dy', PB.num(a.dy) + '%')), item('Estresse', mk('span', 'var_estresse', PB.sig(a.var_estresse) + '%', PB.cls(a.var_estresse))));
+      const tese = mk('p', 'tese', a.tese, 'pb-text'); const risco = mk('p', 'risco', 'Risco: ' + a.risco, 'pb-note');
+      const open = document.createElement('button'); open.className = 'pb-btn'; open.textContent = 'Abrir ' + a.ticker;
+      open.addEventListener('click', () => PB.openAtivo(a.ticker));
+      card.replaceChildren(head, t, kv, tese, risco, open);
+    });
+  };
+
+  const drawRanking = () => {
+    const box = document.getElementById('ranking-chart');
+    if (!PB.visible(box) || !PB.state(box, 'ativos')) return;
+    const rows = [...dash.data('ativos').data].sort((a, b) => a.posicao - b.posicao);
+    const W = box.clientWidth, rowH = 24;
+    const svg = d3.create('svg').attr('width', '100%');
+    const tmp = svg.append('g').append('text').style('font-size', 'var(--cds-font-size-caption)');
+    document.body.appendChild(svg.node());
+    let ml = 0; rows.forEach((r) => { tmp.text(r.posicao + '. ' + r.ticker); ml = Math.max(ml, tmp.node().getComputedTextLength()); });
+    svg.remove(); tmp.remove();
+    const m = { l: ml + 12, r: 44, t: 8, b: 26 }, H = rows.length * rowH + m.t + m.b;
+    svg.attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const x = d3.scaleLinear([0, 1000], [m.l, W - m.r]);
+    const y = d3.scaleBand(rows.map((r) => r.ticker), [m.t, H - m.b]).padding(0.28);
+    svg.append('g').selectAll('line').data(x.ticks(5)).join('line')
+      .attr('x1', (d) => x(d)).attr('x2', (d) => x(d)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickFormat(PB.f0.format)).call(PB.cleanAxis).call((g) => g.select('.domain').remove());
+    const tip = PB.tipFor(box);
+    rows.forEach((r) => {
+      let acc = 0;
+      const g = svg.append('g').style('cursor', 'pointer').on('click', () => PB.openAtivo(r.ticker));
+      PB.PILARES.forEach(([k, name, max], i) => {
+        const v = r[k] || 0;
+        g.append('rect').attr('x', x(acc)).attr('y', y(r.ticker)).attr('width', Math.max(0, x(acc + v) - x(acc)))
+          .attr('height', y.bandwidth()).attr('fill', dash.colors[i])
+          .on('mousemove', (ev) => tip.show(ev, [[r.ticker + ' · ' + r.nome], ['Score', PB.num(r.score, 1)], [name, PB.num(v, 1) + ' de ' + max], ['Confiança', r.confianca]]))
+          .on('mouseleave', tip.hide);
+        acc += v;
+      });
+      g.append('text').attr('x', x(acc) + 6).attr('y', y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em')
+        .attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(PB.f0.format(r.score));
+      svg.append('text').attr('x', m.l - 8).attr('y', y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
+        .attr('fill', PB.sinalColor(r.sinal) === 'var(--cds-chart-status-critical)' ? 'var(--color-bad)' : 'var(--color-fg)')
+        .style('font-size', 'var(--cds-font-size-caption)').text(r.posicao + '. ' + r.ticker);
+    });
+    box.replaceChildren(svg.node(), ...box.querySelectorAll('.pb-tip'));
+  };
+
+  PB.draws.push(drawSinais, drawTop3, drawRanking);
+})();
+</script>
+
+<script>
+// Ranking: tabela com busca, filtro e ordenação
+(() => {
+  const table = document.getElementById('tabela'), tbody = table.querySelector('tbody');
+  const busca = document.getElementById('busca');
+  let sortKey = 'posicao', asc = true, classe = '';
+  const COLS = [...table.querySelectorAll('th')].map((th) => th.dataset.field);
+  const TEXT = new Set(['ticker', 'nome', 'segmento', 'confianca']);
+  const fmt = {
+    posicao: (v) => String(v), score: (v) => PB.num(v, 1), p1: (v) => PB.num(v, 0), p2: (v) => PB.num(v, 0), p3: (v) => PB.num(v, 0), p4: (v) => PB.num(v, 0),
+    preco_atual: (v) => PB.num(v), var_estresse: (v) => PB.sig(v), var_1m: (v) => PB.sig(v), dy: (v) => PB.num(v), pvp: (v) => PB.num(v),
+    ms: (v) => PB.sig(v, 1), valor_justo: (v) => PB.num(v), vol_ratio: (v) => PB.num(v, 1) + 'x'
+  };
+  table.querySelectorAll('th button').forEach((b) => b.addEventListener('click', () => {
+    const k = b.parentElement.dataset.field;
+    asc = sortKey === k ? !asc : TEXT.has(k) || k === 'posicao';
+    sortKey = k; draw();
+  }));
+  busca.addEventListener('input', () => draw());
+  document.querySelectorAll('[data-classe]').forEach((b) => b.addEventListener('click', () => {
+    classe = b.dataset.classe;
+    document.querySelectorAll('[data-classe]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    draw();
+  }));
+  tbody.addEventListener('click', (ev) => { const tr = ev.target.closest('tr[data-key]'); if (tr) PB.openAtivo(tr.dataset.key); });
+  const draw = () => {
+    const d = dash.data('ativos');
+    if (d.status !== 'ok') { tbody.replaceChildren(); return; }
+    const q = busca.value.trim().toLowerCase();
+    const rows = d.data.filter((a) => (!classe || a.classe === classe) && (!q || (a.ticker + ' ' + a.nome + ' ' + a.segmento).toLowerCase().includes(q)))
+      .sort((a, b) => {
+        const x = a[sortKey], y = b[sortKey];
+        if (x === null || x === undefined) return 1; if (y === null || y === undefined) return -1;
+        const c = TEXT.has(sortKey) ? String(x).localeCompare(String(y), 'pt-BR') : x - y;
+        return asc ? c : -c;
+      });
+    table.querySelectorAll('th').forEach((th) => th.setAttribute('aria-sort', th.dataset.field === sortKey ? (asc ? 'ascending' : 'descending') : 'none'));
+    tbody.replaceChildren(...rows.map((a) => {
+      const tr = document.createElement('tr');
+      COLS.forEach((k) => {
+        const td = document.createElement('td');
+        if (TEXT.has(k)) td.className = 'l' + (k === 'nome' || k === 'segmento' ? ' pb-hide-sm' : '');
+        if (['p1', 'p2', 'p3', 'p4', 'valor_justo', 'vol_ratio'].includes(k)) td.className = 'pb-hide-sm';
+        td.textContent = k === 'ticker' ? a.ticker : fmt[k] ? fmt[k](a[k]) : (a[k] ?? '—');
+        if (['var_estresse', 'var_1m', 'ms'].includes(k)) td.className += ' ' + PB.cls(a[k]);
+        if (k === 'score') { const bar = document.createElement('span'); bar.className = 'pb-bar'; bar.style.width = (a.score / 1000 * 4) + 'rem'; bar.style.background = PB.sinalColor(a.sinal); td.append(bar); }
+        tr.append(td);
+      });
+      return tr;
+    }));
+  };
+  PB.draws.push(draw);
+})();
+</script>
+
+<script>
+// Valor × queda: dispersão de ações, barras de margem de segurança, dispersão de FIIs
+(() => {
+  const leg = document.getElementById('sinal-legend');
+  leg.replaceChildren(...Object.keys(PB.SINAL).map((s) => {
+    const e = document.createElement('span'); const sw = document.createElement('i'); sw.className = 'pb-sw';
+    sw.style.background = PB.sinalColor(s); e.append(sw, PB.sinalName(s)); return e;
+  }));
+
+  const grid = (svg, x, y, m, W, H) => {
+    svg.append('g').selectAll('line').data(y.ticks(5)).join('line').attr('x1', m.l).attr('x2', W - m.r)
+      .attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', 'var(--cds-chart-grid)');
+  };
+
+  const scatterAcoes = () => {
+    const box = document.getElementById('scatter-acoes');
+    if (!PB.visible(box) || !PB.state(box, 'ativos')) return;
+    const rows = dash.data('ativos').data.filter((a) => a.classe === 'Ação' && a.ms !== null);
+    const W = box.clientWidth, H = 380, m = { l: 52, r: 16, t: 12, b: 40 };
+    const x = d3.scaleLinear(d3.extent([0, ...rows.map((r) => r.var_estresse)]), [m.l, W - m.r]).nice();
+    const y = d3.scaleLinear([-100, Math.max(30, d3.max(rows, (r) => r.ms))], [H - m.b, m.t]).nice();
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    grid(svg, x, y, m, W, H);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(6).tickFormat((d) => d + '%')).call(PB.cleanAxis);
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat((d) => d + '%')).call(PB.cleanAxis);
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+    svg.append('text').attr('x', W - m.r).attr('y', y(0) - 6).attr('text-anchor', 'end').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('valor justo');
+    svg.append('text').attr('x', m.l).attr('y', H - 4).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Variação 23/10 → 26/10');
+    svg.append('text').attr('transform', `translate(12,${m.t}) rotate(90)`).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('Margem de segurança');
+    const tip = PB.tipFor(box);
+    const g = svg.append('g').selectAll('g').data(rows).join('g').attr('transform', (r) => `translate(${x(r.var_estresse)},${y(Math.max(-100, r.ms))})`)
+      .style('cursor', 'pointer').on('click', (ev, r) => PB.openAtivo(r.ticker))
+      .on('mousemove', (ev, r) => tip.show(ev, [[r.ticker + ' · ' + r.nome], ['Estresse', PB.sig(r.var_estresse) + '%'], ['Margem de segurança', PB.sig(r.ms, 1) + '%'], ['Preço / justo', 'R$ ' + PB.num(r.preco_atual) + ' / R$ ' + PB.num(r.valor_justo)], ['Score', PB.num(r.score, 1)]]))
+      .on('mouseleave', tip.hide);
+    g.append('circle').attr('r', 6).attr('fill', (r) => PB.sinalColor(r.sinal));
+    g.append('text').attr('x', 9).attr('dy', '0.35em').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((r) => r.ticker);
+    box.replaceChildren(svg.node(), ...box.querySelectorAll('.pb-tip'));
+  };
+
+  const msBars = () => {
+    const box = document.getElementById('ms-bars');
+    if (!PB.visible(box) || !PB.state(box, 'ativos')) return;
+    const rows = dash.data('ativos').data.filter((a) => a.classe === 'Ação' && a.ms !== null).sort((a, b) => b.ms - a.ms);
+    const W = box.clientWidth, rowH = 22, m = { l: 56, r: 56, t: 6, b: 26 }, H = rows.length * rowH + m.t + m.b;
+    const x = d3.scaleLinear([-100, Math.max(30, d3.max(rows, (r) => r.ms))], [m.l, W - m.r]).nice();
+    const y = d3.scaleBand(rows.map((r) => r.ticker), [m.t, H - m.b]).padding(0.3);
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(4).tickFormat((d) => d + '%')).call(PB.cleanAxis);
+    const tip = PB.tipFor(box);
+    rows.forEach((r) => {
+      const v = Math.max(-100, r.ms);
+      svg.append('rect').attr('x', Math.min(x(0), x(v))).attr('width', Math.abs(x(v) - x(0))).attr('y', y(r.ticker)).attr('height', y.bandwidth()).attr('rx', 4)
+        .attr('fill', v > 0 ? dash.colors[0] : 'var(--cds-chart-muted)').style('cursor', 'pointer')
+        .on('click', () => PB.openAtivo(r.ticker))
+        .on('mousemove', (ev) => tip.show(ev, [[r.ticker], ['Margem de segurança', PB.sig(r.ms, 1) + '%'], ['Preço', 'R$ ' + PB.num(r.preco_atual)], ['Valor justo', 'R$ ' + PB.num(r.valor_justo)], ['ROE normalizado', PB.num(r.roe_n, 1) + '%']]))
+        .on('mouseleave', tip.hide);
+      svg.append('text').attr('x', m.l - 6).attr('y', y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(r.ticker);
+      svg.append('text').attr('x', W - m.r + 6).attr('y', y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em').attr('fill', r.ms > 0 ? 'var(--color-ok)' : 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text(PB.sig(r.ms, 0) + '%');
+    });
+    svg.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-axis)');
+    box.replaceChildren(svg.node(), ...box.querySelectorAll('.pb-tip'));
+  };
+
+  const scatterFiis = () => {
+    const box = document.getElementById('scatter-fiis');
+    if (!PB.visible(box) || !PB.state(box, 'ativos', 'parametros')) return;
+    const rows = dash.data('ativos').data.filter((a) => a.classe === 'FII');
+    const cdi = dash.data('parametros').data[0].cdi_liq;
+    const W = box.clientWidth, H = 340, m = { l: 44, r: 16, t: 12, b: 40 };
+    const x = d3.scaleLinear(d3.extent(rows, (r) => r.pvp), [m.l, W - m.r]).nice();
+    const y = d3.scaleLinear([Math.min(6, d3.min(rows, (r) => r.dy)), Math.max(cdi, d3.max(rows, (r) => r.dy)) + 0.5], [H - m.b, m.t]).nice();
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    grid(svg, x, y, m, W, H);
+    svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(5).tickFormat((d) => PB.num(d, 2))).call(PB.cleanAxis);
+    svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5).tickFormat((d) => d + '%')).call(PB.cleanAxis);
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(cdi)).attr('y2', y(cdi)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 3');
+    if (x.domain()[0] < 1 && x.domain()[1] > 1) svg.append('line').attr('x1', x(1)).attr('x2', x(1)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '2 3');
+    svg.append('text').attr('x', m.l).attr('y', H - 4).attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text('P/VP (abaixo de 1 = desconto patrimonial)');
+    const tip = PB.tipFor(box);
+    const g = svg.append('g').selectAll('g').data(rows).join('g').attr('transform', (r) => `translate(${x(r.pvp)},${y(r.dy)})`)
+      .style('cursor', 'pointer').on('click', (ev, r) => PB.openAtivo(r.ticker))
+      .on('mousemove', (ev, r) => tip.show(ev, [[r.ticker + ' · ' + r.segmento], ['P/VP', PB.num(r.pvp)], ['DY 12m', PB.num(r.dy) + '%'], ['FFO cobre', PB.num(r.cobertura_ffo, 1) + '% da distribuição'], ['Passivo / ativo', PB.num(r.passivo_ativo, 1) + '%'], ['Score', PB.num(r.score, 1)]]))
+      .on('mouseleave', tip.hide);
+    g.append('circle').attr('r', 7).attr('stroke-width', 2)
+      .attr('stroke', (r) => PB.sinalColor(r.sinal)).attr('fill', (r) => r.cobertura_ffo < 85 ? 'var(--color-panel)' : PB.sinalColor(r.sinal));
+    g.append('text').attr('x', 10).attr('dy', '0.35em').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((r) => r.ticker);
+    box.replaceChildren(svg.node(), ...box.querySelectorAll('.pb-tip'));
+  };
+
+  PB.draws.push(scatterAcoes, msBars, scatterFiis);
+})();
+</script>
+
+<script>
+// Preços: pequenos múltiplos em base 100
+(() => {
+  const draw = () => {
+    const box = document.getElementById('multiples');
+    if (!PB.visible(box) || !PB.state(box, 'precos', 'ativos', 'parametros')) return;
+    const precos = dash.data('precos').data, ativos = [...dash.data('ativos').data].sort((a, b) => a.posicao - b.posicao);
+    const par = dash.data('parametros').data[0];
+    const byT = d3.group(precos, (p) => p.ticker);
+    const ibov = (byT.get('IBOV') || []).map((p) => ({ d: new Date(p.data), v: p.base100 }));
+    const all = precos.map((p) => p.base100);
+    const yDom = [d3.min(all), d3.max(all)];
+    const xDom = d3.extent(precos, (p) => new Date(p.data));
+    const est = new Date(par.data_estresse || par.data_ref);
+    box.replaceChildren(...ativos.map((a) => {
+      const card = document.createElement('div'); card.style.minWidth = '0';
+      const h = document.createElement('div'); h.className = 'pb-label';
+      const last = a.var_1m;
+      h.textContent = a.posicao + '. ' + a.ticker + ' · ' + PB.sig(last, 1) + '% em 1 mês';
+      const c = document.createElement('div'); c.className = 'pb-chart'; c.style.height = '110px';
+      card.append(h, c);
+      return card;
+    }));
+    const est2 = new Date(dash.data('parametros').data[0].data_ref);
+    box.querySelectorAll('.pb-chart').forEach((c, i) => {
+      const a = ativos[i];
+      const pts = (byT.get(a.ticker) || []).map((p) => ({ d: new Date(p.data), v: p.base100, c: p.fechamento }));
+      const W = c.clientWidth || 220, H = 110, m = { l: 2, r: 2, t: 6, b: 6 };
+      const x = d3.scaleUtc(xDom, [m.l, W - m.r]), y = d3.scaleLinear(yDom, [H - m.b, m.t]);
+      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+      svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(100)).attr('y2', y(100)).attr('stroke', 'var(--cds-chart-grid)');
+      svg.append('line').attr('x1', x(est2)).attr('x2', x(est2)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '3 3');
+      const line = d3.line().x((p) => x(p.d)).y((p) => y(p.v));
+      svg.append('path').attr('d', line(ibov)).attr('fill', 'none').attr('stroke', 'var(--cds-chart-muted)').attr('stroke-width', 1.5);
+      svg.append('path').attr('d', line(pts)).attr('fill', 'none').attr('stroke', PB.sinalColor(a.sinal) === 'var(--cds-chart-muted)' ? dash.colors[0] : PB.sinalColor(a.sinal))
+        .attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
+      const end = pts[pts.length - 1];
+      if (end) svg.append('circle').attr('cx', x(end.d)).attr('cy', y(end.v)).attr('r', 3).attr('fill', 'var(--color-fg)');
+      const tip = PB.tipFor(c);
+      const bis = d3.bisector((p) => p.d).center;
+      svg.append('rect').attr('x', m.l).attr('y', 0).attr('width', W - m.l - m.r).attr('height', H).attr('fill', 'transparent')
+        .on('mousemove', (ev) => {
+          const [mx] = d3.pointer(ev); const p = pts[bis(pts, x.invert(mx))]; if (!p) return;
+          tip.show(ev, [[d3.utcFormat('%d/%m/%Y')(p.d)], [a.ticker, 'R$ ' + PB.num(p.c) + ' (' + PB.num(p.v, 1) + ')'], ['Ibovespa', PB.num((ibov[bis(ibov, p.d)] || {}).v, 1)]]);
+        }).on('mouseleave', tip.hide).on('click', () => PB.openAtivo(a.ticker)).style('cursor', 'pointer');
+      c.replaceChildren(svg.node(), ...c.querySelectorAll('.pb-tip'));
+    });
+  };
+  PB.draws.push(draw);
+})();
+</script>
+
+<script>
+// Ativo: detalhe de um ticker
+(() => {
+  const sel = document.getElementById('sel-ativo');
+  sel.addEventListener('change', () => { PB.selected = sel.value; PB.redraw(); });
+  const kv = (label, field, text, cls, ticker) => {
+    const w = document.createElement('div'); const l = document.createElement('span'); l.className = 'pb-label'; l.textContent = label;
+    const b = document.createElement('b'); const s = document.createElement('span');
+    if (field) { s.dataset.source = 'ativos'; s.dataset.field = field; s.dataset.where = 'ticker=' + encodeURIComponent(ticker); }
+    s.textContent = text; if (cls) s.className = cls; b.append(s); w.append(l, b); return w;
+  };
+  const draw = () => {
+    const d = dash.data('ativos');
+    const resumo = document.getElementById('ativo-resumo'), ind = document.getElementById('ativo-indicadores');
+    if (d.status !== 'ok') { resumo.replaceChildren(); ind.replaceChildren(); return; }
+    const rows = [...d.data].sort((a, b) => a.posicao - b.posicao);
+    if (sel.options.length !== rows.length) sel.replaceChildren(...rows.map((a) => new Option(a.posicao + '. ' + a.ticker + ' · ' + a.nome, a.ticker)));
+    if (!PB.selected) PB.selected = rows[0].ticker;
+    sel.value = PB.selected;
+    const a = rows.find((r) => r.ticker === PB.selected);
+    if (!a || PB.current !== 'ativo') return;
+    const T = a.ticker;
+    const h = document.createElement('div'); h.className = 'pb-big';
+    const sTk = document.createElement('span'); sTk.dataset.source = 'ativos'; sTk.dataset.field = 'ticker'; sTk.dataset.where = 'ticker=' + T; sTk.textContent = T;
+    h.append(sTk, ' · ');
+    const sc = document.createElement('span'); sc.dataset.source = 'ativos'; sc.dataset.field = 'score'; sc.dataset.where = 'ticker=' + T; sc.textContent = PB.num(a.score, 1); h.append(sc);
+    const sub = document.createElement('div'); sub.className = 'pb-label';
+    sub.textContent = a.nome + ' · ' + a.segmento + ' · ' + a.posicao + 'º de ' + rows.length + ' · ' + a.status + ' · cobertura ' + PB.num(a.cobertura, 0) + '%';
+    const chip = document.createElement('span'); chip.className = 'pb-chip';
+    const dot = document.createElement('i'); dot.style.background = PB.sinalColor(a.sinal); chip.append(dot, PB.sinalName(a.sinal) + ' · confiança ' + a.confianca.toLowerCase());
+    const mkP = (field, text, cls) => { const p = document.createElement('p'); p.className = cls; p.dataset.source = 'ativos'; p.dataset.field = field; p.dataset.where = 'ticker=' + T; p.textContent = text; return p; };
+    resumo.replaceChildren(h, sub, chip, mkP('tese', a.tese, 'pb-text'), mkP('risco', 'Risco: ' + a.risco, 'pb-note'), mkP('nota', a.nota, 'pb-note'));
+
+    const grid1 = document.createElement('div'); grid1.className = 'pb-kv';
+    const add = (label, field, text, cls) => grid1.append(kv(label, field, text, cls, T));
+    add('Preço 1 mês antes', 'preco_1m', 'R$ ' + PB.num(a.preco_1m));
+    add('Preço 1 semana antes', 'preco_1s', 'R$ ' + PB.num(a.preco_1s));
+    add('Pré-estresse', 'preco_pre', 'R$ ' + PB.num(a.preco_pre));
+    add('Mínima no estresse', 'preco_estresse_min', 'R$ ' + PB.num(a.preco_estresse_min));
+    add('Fechamento atual', 'preco_atual', 'R$ ' + PB.num(a.preco_atual));
+    add('Variação no estresse', 'var_estresse', PB.sig(a.var_estresse) + '%', PB.cls(a.var_estresse));
+    add('Variação em 1 mês', 'var_1m', PB.sig(a.var_1m) + '%', PB.cls(a.var_1m));
+    add('Queda do pico de 3 meses', 'queda_pico', PB.sig(a.queda_pico) + '%', PB.cls(a.queda_pico));
+    add('Volume no estresse ÷ média', 'vol_ratio', PB.num(a.vol_ratio, 1) + 'x');
+    add('DY 12m', 'dy', PB.num(a.dy) + '%');
+    add('P/VP', 'pvp', PB.num(a.pvp));
+    add('Patrimônio líquido', 'patrimonio_bi', 'R$ ' + PB.num(a.patrimonio_bi) + ' bi');
+    if (a.classe === 'Ação') {
+      add('P/L', 'pl_ratio', PB.num(a.pl_ratio));
+      add('EV/EBITDA', 'ev_ebitda', PB.num(a.ev_ebitda));
+      add('ROE 12m', 'roe', PB.num(a.roe) + '%');
+      add('ROE normalizado', 'roe_n', PB.num(a.roe_n) + '%');
+      add('Margem líquida', 'margem_liq', a.margem_liq === null ? '—' : PB.num(a.margem_liq, 1) + '%');
+      add('Earnings yield', 'earnings_yield', PB.num(a.earnings_yield) + '%');
+      add('Payout', 'payout', a.payout === null ? '—' : PB.num(a.payout, 0) + '%');
+      add(a.alavancagem_tipo, 'alavancagem', PB.num(a.alavancagem));
+      add('Valor justo', 'valor_justo', 'R$ ' + PB.num(a.valor_justo));
+      add('Margem de segurança', 'ms', PB.sig(a.ms, 1) + '%', PB.cls(a.ms));
+      if (a.npl90 !== null) add('Inadimplência 90d', 'npl90', PB.num(a.npl90, 1) + '%');
+      if (a.npl90 !== null) add('Cobertura de provisões', 'cobertura_pdd', a.cobertura_pdd === null ? 'N/D' : PB.num(a.cobertura_pdd, 1) + '%');
+    } else {
+      add('Valor patrimonial/cota', 'vp_cota', 'R$ ' + PB.num(a.vp_cota));
+      add('FFO yield', 'ffo_yield', PB.num(a.ffo_yield) + '%');
+      add('FFO ÷ distribuição', 'cobertura_ffo', PB.num(a.cobertura_ffo, 1) + '%', a.cobertura_ffo < 85 ? 'warn' : '');
+      add('Passivo ÷ ativo', 'passivo_ativo', PB.num(a.passivo_ativo, 1) + '%');
+      add('Venda de ativos ÷ distribuição', 'venda_ativos_pct', PB.num(a.venda_ativos_pct, 1) + '%');
+      if (a.vacancia !== null) add('Vacância', 'vacancia', PB.num(a.vacancia, 1) + '%');
+    }
+    add('Balanço / relatório', 'balanco', a.balanco || '—');
+    const t = document.createElement('h3'); t.textContent = 'Indicadores';
+    ind.replaceChildren(t, grid1);
+
+    // pilares
+    const pb = document.getElementById('ativo-pilares');
+    if (PB.visible(pb)) {
+      const W = pb.clientWidth, rowH = 30, m = { l: 92, r: 70, t: 4, b: 4 }, H = PB.PILARES.length * rowH + m.t + m.b;
+      const x = d3.scaleLinear([0, 1], [m.l, W - m.r]);
+      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+      PB.PILARES.forEach(([k, name, max], i) => {
+        const yy = m.t + i * rowH + 6, v = a[k] || 0;
+        svg.append('rect').attr('x', m.l).attr('y', yy).attr('width', x(1) - m.l).attr('height', 14).attr('rx', 4).attr('fill', 'var(--cds-chart-grid)');
+        svg.append('rect').attr('x', m.l).attr('y', yy).attr('width', x(v / max) - m.l).attr('height', 14).attr('rx', 4).attr('fill', dash.colors[i]);
+        svg.append('text').attr('x', m.l - 8).attr('y', yy + 7).attr('dy', '0.35em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(name);
+        svg.append('text').attr('x', x(1) + 8).attr('y', yy + 7).attr('dy', '0.35em').attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text(PB.num(v, 0) + ' / ' + max);
+      });
+      pb.replaceChildren(svg.node());
+    }
+
+    // preço
+    const pc = document.getElementById('ativo-preco');
+    if (PB.visible(pc) && PB.state(pc, 'precos', 'ativos', 'parametros')) {
+      const par = dash.data('parametros').data[0];
+      const pts = dash.data('precos').data.filter((p) => p.ticker === T).map((p) => ({ d: new Date(p.data), v: p.fechamento }));
+      const W = pc.clientWidth, H = 240, m = { l: 52, r: 16, t: 10, b: 28 };
+      const x = d3.scaleUtc(d3.extent(pts, (p) => p.d), [m.l, W - m.r]);
+      const y = d3.scaleLinear(d3.extent(pts, (p) => p.v), [H - m.b, m.t]).nice();
+      const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+      svg.append('g').selectAll('line').data(y.ticks(4)).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', (d) => y(d)).attr('y2', (d) => y(d)).attr('stroke', 'var(--cds-chart-grid)');
+      svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(W / 110))).tickFormat(d3.utcFormat('%d/%m'))).call(PB.cleanAxis);
+      svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(4).tickFormat((d) => 'R$ ' + PB.num(d, 0))).call(PB.cleanAxis);
+      const gid = 'pbgrad';
+      const grad = svg.append('defs').append('linearGradient').attr('id', gid).attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 1);
+      [[0, .26], [.25, .16], [.5, .08], [.75, .03], [1, 0]].forEach(([o, op]) => grad.append('stop').attr('offset', o).attr('style', `stop-color:${dash.colors[0]};stop-opacity:${op}`));
+      svg.append('path').attr('d', d3.area().x((p) => x(p.d)).y0(H - m.b).y1((p) => y(p.v))(pts)).attr('fill', `url(#${gid})`);
+      svg.append('path').attr('d', d3.line().x((p) => x(p.d)).y((p) => y(p.v))(pts)).attr('fill', 'none').attr('stroke', dash.colors[0]).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
+      const keys = [['1 mês', a.preco_1m], ['1 semana', a.preco_1s], ['Pré-estresse', a.preco_pre], ['Estresse', a.preco_atual]];
+      const dates = [par.data_1m, par.data_1s, par.data_pre_estresse, par.data_estresse];
+      keys.forEach(([lab, v], i) => {
+        const dd = dates[i] ? new Date(dates[i]) : null; if (!dd) return;
+        svg.append('circle').attr('cx', x(dd)).attr('cy', y(v)).attr('r', 4).attr('fill', 'var(--color-panel)').attr('stroke', dash.colors[1]).attr('stroke-width', 2);
+      });
+      const tip = PB.tipFor(pc); const bis = d3.bisector((p) => p.d).center;
+      svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+        .on('mousemove', (ev) => { const p = pts[bis(pts, x.invert(d3.pointer(ev)[0]))]; if (p) tip.show(ev, [[d3.utcFormat('%d/%m/%Y')(p.d)], [T, 'R$ ' + PB.num(p.v)]]); })
+        .on('mouseleave', tip.hide);
+      pc.replaceChildren(svg.node(), ...pc.querySelectorAll('.pb-tip'));
+    }
+  };
+  PB.draws.push(draw);
+})();
+</script>
+
+<script>
+// Macro e histórico
+(() => {
+  const mt = document.getElementById('tabela-macro'), mb = mt.querySelector('tbody'), busca = document.getElementById('busca-macro');
+  busca.addEventListener('input', () => drawMacro());
+  const drawMacro = () => {
+    const d = dash.data('macro');
+    if (d.status !== 'ok') { mb.replaceChildren(); return; }
+    const q = busca.value.trim().toLowerCase();
+    const cols = [...mt.querySelectorAll('th')].map((th) => th.dataset.field);
+    mb.replaceChildren(...d.data.filter((r) => !q || Object.values(r).join(' ').toLowerCase().includes(q)).map((r) => {
+      const tr = document.createElement('tr');
+      cols.forEach((k) => { const td = document.createElement('td'); td.className = k === 'valor' ? '' : 'l' + (k === 'fonte' || k === 'obs' ? ' pb-hide-sm' : ''); td.textContent = r[k] ?? ''; tr.append(td); });
+      return tr;
+    }));
+  };
+
+  const ht = document.getElementById('tabela-hist');
+  ht.querySelector('tbody').addEventListener('click', (ev) => { const tr = ev.target.closest('tr[data-key]'); if (tr) PB.openAtivo(tr.dataset.key); });
+  const drawHist = () => {
+    const d = dash.data('historico_pivot'), tb = ht.querySelector('tbody'), hr = ht.querySelector('thead tr');
+    if (d.status !== 'ok' || !d.data.length) { tb.replaceChildren(); return; }
+    const vs = Object.keys(d.data[0]).filter((k) => /^v\d+$/.test(k)).sort((a, b) => +a.slice(1) - +b.slice(1));
+    const cols = ['ticker', ...vs, 'delta'];
+    hr.replaceChildren(...cols.map((k) => {
+      const th = document.createElement('th'); th.dataset.field = k; th.dataset.source = 'historico_pivot';
+      th.className = k === 'ticker' ? 'l' : ''; th.textContent = k === 'ticker' ? 'Ticker' : k === 'delta' ? 'Variação' : 'Score ' + k; return th;
+    }));
+    tb.replaceChildren(...d.data.map((r) => {
+      const tr = document.createElement('tr'); tr.dataset.key = r.ticker;
+      cols.forEach((k) => {
+        const td = document.createElement('td'); td.className = k === 'ticker' ? 'l' : k === 'delta' ? PB.cls(r.delta) : '';
+        td.textContent = k === 'ticker' ? r.ticker : k === 'delta' ? (r.delta === null ? '—' : PB.sig(r.delta, 1)) : PB.num(r[k], 1);
+        tr.append(td);
+      });
+      return tr;
+    }));
+  };
+
+  const drawHeat = () => {
+    const box = document.getElementById('heatmap');
+    if (!PB.visible(box) || !PB.state(box, 'sensibilidade')) return;
+    const rows = dash.data('sensibilidade').data;
+    const scen = [...new Set(rows.map((r) => r.cenario))];
+    const tick = rows.filter((r) => r.cenario === 'base').sort((a, b) => a.posicao - b.posicao).map((r) => r.ticker);
+    const n = tick.length;
+    const W = box.clientWidth, cellH = 22, m = { l: 64, r: 8, t: 74, b: 4 }, H = n * cellH + m.t + m.b;
+    const x = d3.scaleBand(scen, [m.l, W - m.r]).padding(0.06), y = d3.scaleBand(tick, [m.t, H - m.b]).padding(0.06);
+    const c0 = getComputedStyle(box).getPropertyValue('--cds-chart-grid').trim() || '#eee';
+    const col = d3.scaleLinear([n, 1], [0, 1]);
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const tip = PB.tipFor(box);
+    svg.append('g').selectAll('rect').data(rows).join('rect')
+      .attr('x', (r) => x(r.cenario)).attr('y', (r) => y(r.ticker)).attr('width', x.bandwidth()).attr('height', y.bandwidth()).attr('rx', 3)
+      .attr('fill', dash.colors[0]).attr('fill-opacity', (r) => 0.08 + 0.85 * col(r.posicao))
+      .on('mousemove', (ev, r) => tip.show(ev, [[r.ticker + ' · ' + r.cenario], ['Posição', r.posicao + 'º'], ['Score', PB.num(r.score, 1)]]))
+      .on('mouseleave', tip.hide);
+    svg.append('g').selectAll('text').data(rows).join('text')
+      .attr('x', (r) => x(r.cenario) + x.bandwidth() / 2).attr('y', (r) => y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'middle')
+      .attr('fill', (r) => col(r.posicao) > 0.55 ? 'var(--color-bg)' : 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').style('pointer-events', 'none').text((r) => r.posicao);
+    svg.append('g').selectAll('text').data(tick).join('text').attr('x', m.l - 6).attr('y', (t) => y(t) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
+      .attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text((t) => t);
+    svg.append('g').selectAll('text').data(scen).join('text')
+      .attr('transform', (s) => `translate(${x(s) + x.bandwidth() / 2},${m.t - 6}) rotate(-35)`)
+      .attr('fill', 'var(--color-fg-muted)').style('font-size', 'var(--cds-font-size-caption)').text((s) => s.length > 18 ? s.slice(0, 17) + '…' : s);
+    box.replaceChildren(svg.node(), ...box.querySelectorAll('.pb-tip'));
+  };
+  PB.draws.push(drawMacro, drawHist, drawHeat);
+})();
+</script>
+
+<script>
+dash.onData(() => PB.redraw());
+(() => {
+  const named = location.hash.slice(1);
+  if (document.querySelector(`[data-page="${named}"]`)) PB.show(named);
+})();
+</script>

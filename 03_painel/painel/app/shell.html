@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Painel B3</title>
+<meta name="description" content="Score de oportunidades em ações e FIIs da B3. Material educacional.">
+<meta name="theme-color" content="#1f3a34">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Painel B3">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap">
+<style>
+  /* Tokens equivalentes aos do painel no Claude, para a mesma página rodar fora dele */
+  :root {
+    --color-bg: #f6f7f5; --color-panel: #ffffff; --color-fg: #18201d; --color-fg-muted: #5d6863;
+    --color-border-line: #dde2df; --color-ok: #1d7a4f; --color-warn: #a35f00; --color-bad: #b4322a;
+    --c0: #1f6f5c; --c1: #c2702b; --c2: #4a6fa5; --c3: #8a5aa8; --c4: #b0466a; --c5: #2f8f9d; --c6: #7a8a2b; --c7: #6b5b4b;
+    --cds-chart-grid: #e8ebe9; --cds-chart-axis: #c4cac7; --cds-chart-reference: #8b9590; --cds-chart-muted: #b8c0bc;
+    --cds-chart-status-critical: #c0392b; --cds-surface-popover: #ffffff; --cds-border: #d4dad7;
+    --cds-shadow-popover: 0 4px 16px rgb(20 30 25 / .12); --cds-text-secondary: #5d6863;
+    --cds-gap-xs: .25rem; --cds-gap-sm: .5rem; --cds-gap-md: .875rem; --cds-gap-lg: 1.25rem; --cds-gap-xl: 2rem;
+    --cds-pad-xs: .25rem; --cds-pad-sm: .5rem; --cds-pad-md: .75rem; --cds-pad-lg: 1rem; --cds-pad-xl: 1.5rem;
+    --cds-radius: .5rem; --cds-font-size-caption: .8125rem; --cds-font-size-body: .9375rem;
+    --cds-font-size-heading: 1.0625rem; --cds-font-size-title: 1.75rem; --cds-font-weight-medium: 500;
+    --cds-dur-slow: .3s; --cds-ease-out: cubic-bezier(.2, .8, .2, 1);
+    --font-anthropic-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-anthropic-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #111614; --color-panel: #1a211e; --color-fg: #e8ece9; --color-fg-muted: #9aa5a0;
+      --color-border-line: #2c3531; --color-ok: #5cc795; --color-warn: #e0a54a; --color-bad: #f07a70;
+      --c0: #5cc0a6; --c1: #e79a55; --c2: #86a8dc; --c3: #bb8fd6; --c4: #e07a9c; --c5: #5ec2cf; --c6: #b5c457; --c7: #b9a58f;
+      --cds-chart-grid: #232b28; --cds-chart-axis: #3a4440; --cds-chart-reference: #7d8883; --cds-chart-muted: #4e5a55;
+      --cds-chart-status-critical: #f07a70; --cds-surface-popover: #222a27; --cds-border: #36403c;
+      --cds-shadow-popover: 0 4px 16px rgb(0 0 0 / .5); --cds-text-secondary: #9aa5a0; color-scheme: dark;
+    }
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--color-bg); color: var(--color-fg); font: var(--cds-font-size-body)/1.5 var(--font-anthropic-sans); -webkit-tap-highlight-color: transparent; }
+  .app-bar { position: sticky; top: 0; z-index: 5; background: var(--color-bg); border-bottom: 1px solid var(--color-border-line);
+    padding: calc(env(safe-area-inset-top, 0px) + .5rem) max(16px, env(safe-area-inset-right, 0px)) .5rem max(16px, env(safe-area-inset-left, 0px));
+    display: flex; gap: .75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .app-bar small { color: var(--color-fg-muted); }
+  .app-btn { font: inherit; font-size: var(--cds-font-size-caption); text-decoration: none; color: var(--color-fg);
+    border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: .4rem .7rem; background: var(--color-panel); }
+  .app-btn:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+  #dash-root { padding: 1rem max(16px, env(safe-area-inset-right, 0px)) calc(2rem + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); max-width: 1200px; margin-inline: auto; }
+  .dash-skeleton { color: transparent !important; background: var(--cds-chart-grid); border-radius: 4px; min-height: 1em; }
+</style>
+</head>
+<body>
+<div class="app-bar">
+  <small id="app-status">Carregando dados…</small>
+  <a class="app-btn" id="app-update" href="{{ACTIONS_URL}}" target="_blank" rel="noopener">Atualizar dados</a>
+</div>
+<div id="dash-root">
+<!--PAINEL-->
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+// Camada mínima com a mesma API "dash" do painel no Claude: lê os JSON de dados/ e redesenha
+window.dash = (() => {
+  const IDS = ['ativos', 'precos', 'macro', 'sensibilidade', 'historico', 'parametros'];
+  const src = {}, calcs = [], subs = [];
+  IDS.forEach((id) => { src[id] = { status: 'loading', data: [] }; });
+  const out = {};
+  const recalc = () => {
+    calcs.forEach(({ id, inputs, fn }) => {
+      const ins = inputs.map((i) => src[i] || out[i]);
+      if (ins.some((x) => !x || x.status !== 'ok')) { out[id] = { status: 'loading', data: [] }; return; }
+      try { out[id] = { status: 'ok', data: fn(...ins.map((x) => x.data)) }; } catch (e) { out[id] = { status: 'error', data: [], message: String(e) }; }
+    });
+  };
+  const notify = () => { recalc(); subs.forEach((fn) => { try { fn(); } catch (e) { console.error(e); } }); };
+  const load = () => Promise.all(IDS.map((id) => fetch('dados/' + id + '.json', { cache: 'no-cache' })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((data) => { src[id] = { status: 'ok', data, columns: data.length ? Object.keys(data[0]) : [] }; })
+    .catch((e) => { src[id] = { status: 'error', data: [], message: String(e) }; })))
+    .then(notify);
+  let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(notify, 150); });
+  load();
+  return {
+    colors: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => `var(--c${i})`),
+    data: (id) => src[id] || out[id] || { status: 'missing', data: [] },
+    onData: (fn) => { subs.push(fn); try { fn(); } catch (e) { console.error(e); } },
+    calc: (id, { inputs, fn }) => { calcs.push({ id, inputs, fn }); },
+    loader: () => {}, refresh: load,
+    setLink: (name) => history.replaceState(null, '', '#' + name),
+    params: () => ({}), setParams: () => {}, resetParams: () => {}
+  };
+})();
+dash.onData(() => {
+  const p = dash.data('parametros'), s = document.getElementById('app-status');
+  if (p.status === 'ok') s.textContent = 'Versão ' + p.data[0].versao + ' · preços de ' + p.data[0].data_ref.split('-').reverse().join('/');
+  else if (p.status === 'error') s.textContent = 'Sem conexão e sem cópia salva dos dados';
+});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+<!--SCRIPTS-->
+</body>
+</html>

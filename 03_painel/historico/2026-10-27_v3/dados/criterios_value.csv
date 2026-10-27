@@ -1,0 +1,32 @@
+﻿setor;etapa;metrica;sinal_desconto_irracional;sinal_armadilha;observacao
+geral;premissa;Ke nominal;17 a 19%;;DI longo ~15% + prêmio 3-4 pp (out/2026)
+geral;A;P/L recorrente;< 70% da média 5 anos e < média setor;baixo só por lucro não recorrente;earnings yield de equilíbrio: P/L <= ~5,5x sem crescimento
+geral;A;EV/EBITDA;< 70% da média 5 anos;;preferir para empresas alavancadas
+geral;A;Dividend Yield;> NTN-B longa + 2 pp com payout <= 80% do FCF;DY alto só por queda de preço ou pago com dívida;
+geral;A;Queda vs setor;caiu mais que o setor sem fato relevante próprio;queda com fato relevante;
+geral;B;ROE;>= Ke estável 4-8 tri;< Ke estrutural ou queda 3+ tri;
+geral;B;Dívida líquida / EBITDA;< 2,0x ou caixa líquido;> 3,0x e subindo;varejo: ex-IFRS16
+geral;B;EBIT / Desp. financeira (a CDI 15%);> 3,0x;< 1,5x;recalcular com CDI atual
+geral;B;Fluxo de caixa livre;positivo e cobre dividendos;negativo;
+geral;B;Revisões de lucro;queda do preço >> queda da projeção;cortes >= queda do preço;
+geral;B;Margens vs pares;estáveis;comprimindo mais que pares;
+geral;B;Amortização 18 meses;coberta por caixa;depende de refinanciamento;
+geral;B;Causa da queda;macro/beta igual ao setor;fato relevante, guidance, gestão;
+geral;B;Governança;sem mudança;ingerência estatal, conflito controlador;
+geral;regra;Classificação;>= 7 de 9 sinais verdes na etapa B;>= 3 sinais vermelhos;meio-termo = em observação
+bancos;A;P/VP;< P/VP justo = (ROE-g)/(Ke-g);P/VP baixo com ROE < Ke;não usar EV/EBITDA
+bancos;B;Cobertura PDD/NPL90;> 180%;< 150% e caindo;
+bancos;B;NPL 90 tendência;estável/caindo;alta > 50 bps em 2 tri;
+bancos;B;CET1;> 11%;< 10%;
+fii_tijolo;A;P/VP;< 0,85;;checar laudo de avaliação
+fii_tijolo;B;Vacância financeira;< 10%;> 15%;
+fii_tijolo;B;WAULT / contratos atípicos;WAULT > 5 anos;contratos curtos, revisional próxima;
+fii_tijolo;B;LTV (alavancagem);< 15%;> 30% ou dívida CDI;
+fii_tijolo;B;Cap rate implícito;> NTN-B longa + 2 pp;;
+fii_papel;A;P/VP;0,90 a 1,00 com carteira high grade;< 0,85 por crédito;
+fii_papel;B;CRIs em atraso/carência;< 3%;> 10%;
+fii_papel;B;Concentração por devedor;< 10%;> 15%;
+fii_papel;B;Segmento dos CRIs;corporativo/logístico high grade;incorporação, multipropriedade, loteamento high yield;
+fii_geral;B;DY recorrente;sustentado por resultado do período;sustentado por reserva, venda de ativo ou RMG;
+estatais;ajuste;Desconto de governança;aplicar 20-40% antes de comparar;;desconto persistente
+commodities;A;EV/EBITDA;no preço médio de ciclo;P/L baixo no pico do ciclo;
