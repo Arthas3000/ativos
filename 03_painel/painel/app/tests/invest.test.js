@@ -296,8 +296,11 @@ test('planejarAportes (g): sem preço → 0 + aviso', () => {
   const L = porTk(r);
   assert.equal(L.AAAA3.qtd, 0); assert.equal(L.AAAA3.propostoCent, 0); assert.equal(L.AAAA3.motivo, 'sem preço');
   assert.ok(r.avisos.some((a) => /AAAA3: sem preço/.test(a)));
-  // B recebe a meta (5000) e, todos na meta, o resto (5000) → 10 un
-  assert.equal(L.BBBB3.qtd, 10);
+  // T = 10000. B tem meta 5000 (5 un); a meta de A (5000) NÃO vai para B (B passaria de 50%): fica como sobra.
+  // Lote extra: B é candidato até alvo × T + 1 lote = 5000 + 1000 → 6 un (6000). Sobra = 10000 − 6000 = 4000.
+  assert.equal(L.BBBB3.qtd, 6);
+  assert.equal(r.sobraCent, 4000);
+  assert.ok(r.avisos.some((a) => /sem uso.*AAAA3/.test(a)));
 });
 
 test('planejarAportes (h): erros de validação', () => {
@@ -367,20 +370,77 @@ test('planejarAportes: propriedade em 200 casos pseudo-aleatórios', () => {
     assert.ok(r.totalCent <= r.disponivelCent, tag);
     assert.equal(r.sobraCent, orc - r.totalCent, tag);
     assert.equal(r.totalCarteiraDepoisCent, V + somaBruto, tag);
-    // nenhum lote adicional cabe na sobra respeitando o teto (ativos com alvo > 0 e preço)
+    // base única de depoisPct/alvo/teto: T = V + disponível
+    assert.equal(r.baseDepoisCent, T, tag);
+    // nenhum lote adicional cabe na sobra entre os candidatos:
+    // se alguém tinha need > 0, só quem tinha need > 0 (sem passar de alvo×T + 1 lote); senão, qualquer alvo > 0 (respeita o teto)
     const livre = r.disponivelCent - r.totalCent;
+    const alvoC = ativos.map((a) => Math.round(a.alvoPct / 100 * T));
+    const haNec = ativos.some((a, i) => alvoC[i] - a.valorAtualCent > 0);
     r.linhas.forEach((l, i) => {
       const a = ativos[i];
-      if (l.precoCent === null || a.alvoPct <= 0) return;
-      const nb = l.brutoCent + l.lote * l.precoCent;
+      assert.ok(Math.abs(l.depoisPct - (a.valorAtualCent + l.brutoCent) / T * 100) < 1e-9, `${tag} ${l.ticker}: depoisPct`);
       const teto = a.maxPct === null ? Infinity : Math.max(0, Math.round(a.maxPct / 100 * T) - a.valorAtualCent);
-      const inc = nb + C.taxas({ brutoCent: nb, qtd: l.qtd + l.lote, taxaFixaCent: p.taxaFixaCent, taxaPct: p.taxaPct }) - l.totalCent;
-      assert.ok(inc > livre || nb > teto, `${tag} ${l.ticker}: mais um lote caberia`);
       if (a.maxPct !== null) assert.ok(l.brutoCent <= teto, `${tag} ${l.ticker}: passou do teto`);
+      if (l.precoCent === null || a.alvoPct <= 0) return;
+      if (haNec && alvoC[i] - a.valorAtualCent <= 0) return; // não candidato
+      const nb = l.brutoCent + l.lote * l.precoCent;
+      const inc = nb + C.taxas({ brutoCent: nb, qtd: l.qtd + l.lote, taxaFixaCent: p.taxaFixaCent, taxaPct: p.taxaPct }) - l.totalCent;
+      const passaAlvo = haNec && a.valorAtualCent + nb > alvoC[i] + l.lote * l.precoCent;
+      assert.ok(inc > livre || nb > teto || passaAlvo, `${tag} ${l.ticker}: mais um lote caberia`);
+    });
+    // quem tinha necessidade em algum ativo nunca manda lote extra para quem estava na/acima da meta
+    if (haNec) r.linhas.forEach((l, i) => {
+      if (alvoC[i] - ativos[i].valorAtualCent <= 0 && l.precoCent !== null) {
+        // o que recebeu veio só da distribuição em dinheiro (sem lote extra): bruto ≤ proposto
+        assert.ok(l.brutoCent <= l.propostoCent, `${tag} ${l.ticker}: lote extra para ativo sem necessidade`);
+      }
     });
     // determinismo
     assert.deepEqual(C.planejarAportes(p), r, tag);
   }
+});
+
+test('planejarAportes: lote extra não vai para ativo acima da meta enquanto outro está abaixo', () => {
+  // A: alvo 50%, valor 0, lote R$ 500 (preço R$ 500); B: alvo 50%, já 100% da carteira, lote R$ 1.
+  // R$ 100: A não cabe (1 lote = 50000) → a sobra fica como sobra; B NÃO recebe 100 unidades.
+  const r = C.planejarAportes(base({ orcamentoCent: 10000, ativos: [
+    { ticker: 'AAAA3', precoCent: 50000, lote: 1, valorAtualCent: 0, alvoPct: 50 },
+    { ticker: 'BBBB3', precoCent: 100, lote: 1, valorAtualCent: 1000000, alvoPct: 50 },
+  ] }));
+  const L = porTk(r);
+  assert.equal(L.AAAA3.qtd, 0);
+  assert.equal(L.BBBB3.qtd, 0);
+  assert.equal(r.totalCent, 0);
+  assert.equal(r.sobraCent, 10000);
+});
+
+test('planejarAportes: todos na meta → lote extra vale para quem tem alvo > 0 (respeitando o teto)', () => {
+  // A: alvo 10%, valor 5000 → T = 5100, alvo 510 → need 0 (todos na meta); B: alvo 0.
+  const r = C.planejarAportes(base({ orcamentoCent: 100, ativos: [
+    { ticker: 'AAAA3', precoCent: 30, valorAtualCent: 5000, alvoPct: 10 },
+    { ticker: 'BBBB3', precoCent: 30, valorAtualCent: 0, alvoPct: 0 },
+  ] }));
+  const L = porTk(r);
+  assert.equal(L.AAAA3.qtd, 3); // 3 × 30 = 90 ≤ 100
+  assert.equal(L.BBBB3.qtd, 0); // alvo 0 nunca recebe
+  assert.equal(r.sobraCent, 10);
+  // com teto, o lote extra respeita o teto (maxPct 10% de T = 510 → teto = 510 − 5000 → 0)
+  const r2 = C.planejarAportes(base({ orcamentoCent: 100, ativos: [
+    { ticker: 'AAAA3', precoCent: 30, valorAtualCent: 5000, alvoPct: 10, maxPct: 10 },
+  ] }));
+  assert.equal(r2.linhas[0].qtd, 0);
+  assert.equal(r2.sobraCent, 100);
+});
+
+test('planejarAportes: depoisPct usa a mesma base do alvo e do teto (T = V + disponível)', () => {
+  // orçamento 10000, reserva 2000 → disponível 8000; V = 0; T = 8000. Preço 3000 → 2 un. (6000); sobra do disponível 2000.
+  const r = C.planejarAportes(base({ orcamentoCent: 10000, reservaCent: 2000, ativos: [
+    { ticker: 'AAAA3', precoCent: 3000, alvoPct: 100 },
+  ] }));
+  assert.equal(r.baseDepoisCent, 8000);
+  near(r.linhas[0].depoisPct, 6000 / 8000 * 100);
+  assert.equal(r.totalCarteiraDepoisCent, 6000);
 });
 
 // ======================================================================= simulação
@@ -615,4 +675,21 @@ test('addMeses e diasEntre', () => {
   assert.equal(C.addMeses('2024-03-31', -1), '2024-02-29');
   assert.equal(C.diasEntre('2023-01-01', '2024-01-01'), 365);
   assert.equal(C.diasEntre('2024-01-01', '2025-01-01'), 366);
+});
+
+test('planejarAportes: ativo sem preço abaixo da meta não trava os lotes extras dos outros', () => {
+  // A sem preço (alvo 50%, precisa de R$ 500); B e C com preço, já na meta pelo total T = 0 + 1000.
+  // B alvo 25% (R$ 250 / R$ 10 = 25 un), C alvo 25% (R$ 250 / R$ 30 = 8 un = R$ 240, sobra R$ 10).
+  const r = C.planejarAportes({ orcamentoCent: 100000, ativos: [
+    { ticker: 'A', precoCent: null, alvoPct: 50 },
+    { ticker: 'B', precoCent: 1000, alvoPct: 25 },
+    { ticker: 'C', precoCent: 3000, alvoPct: 25 }] });
+  const by = Object.fromEntries(r.linhas.map((l) => [l.ticker, l]));
+  assert.equal(by.A.qtd, 0);
+  assert.ok(r.avisos.some((a) => a.includes('A')));
+  assert.ok(r.totalCent <= r.disponivelCent);
+  // B e C recebem só a própria meta + no máximo 1 lote extra (alvo × T + 1 lote); a meta de A fica como sobra.
+  assert.equal(by.B.qtd, 26); // 25 un (R$ 250) + 1 lote
+  assert.equal(by.C.qtd, 9);  // 8 un (R$ 240) + 1 lote = R$ 270 ≤ R$ 250 + R$ 30
+  assert.equal(r.sobraCent, 100000 - 26000 - 27000);
 });

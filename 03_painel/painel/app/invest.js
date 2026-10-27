@@ -400,13 +400,14 @@
       var temTeto = a.maxPct !== null && a.maxPct !== undefined;
       var tetoCent = temTeto ? Math.max(0, rnd(a.maxPct / 100 * T) - va) : Infinity;
       // 3. necessidade
-      var need = Math.max(0, rnd(a.alvoPct / 100 * T) - va);
+      var alvoCent = rnd(a.alvoPct / 100 * T);
+      var need = Math.max(0, alvoCent - va);
       var atualPct = V > 0 ? va / V * 100 : 0;
       return {
         ticker: a.ticker, precoCent: preco, lote: lote, valorAtualCent: va, atualPct: atualPct,
         alvoPct: a.alvoPct, maxPct: temTeto ? a.maxPct : null, gapPct: a.alvoPct - atualPct,
         score: temScore ? a.score : null, z: z, fatorScore: fator,
-        need: need, teto: tetoCent, limite: preco === null ? 0 : Math.min(need, tetoCent)
+        need: need, alvoCent: alvoCent, teto: tetoCent, limite: preco === null ? 0 : Math.min(need, tetoCent)
       };
     });
 
@@ -423,11 +424,19 @@
     rodada(function (l) { return l.need * l.fatorScore; }, function (l, i) { return l.limite - prop[i]; });
     // se ainda há necessidade só em ativos com fator 0, completa sem o score (o score só reordena)
     if (rem > 0) rodada(function (l, i) { return l.limite - prop[i]; }, function (l, i) { return l.limite - prop[i]; });
+    // a meta de um ativo sem preço não vai para os outros (eles passariam da meta): fica como sobra, com aviso
+    var semPreco = 0;
+    L.forEach(function (l) { if (l.precoCent === null) semPreco += l.need; });
+    if (semPreco > 0) avisos.push(fmtBRL(Math.min(semPreco, rem)) + ' ficam sem uso: é a parte da meta de ativos sem preço (' +
+      L.filter(function (l) { return l.precoCent === null && l.need > 0; }).map(function (l) { return l.ticker; }).join(', ') + ').');
     // todos na meta: distribui o resto pelos alvos, respeitando só o teto
-    if (rem > 0) {
+    if (rem > semPreco) {
+      var guardado = semPreco;
+      rem -= guardado;
       var capT = function (l, i) { return l.precoCent === null ? 0 : l.teto - prop[i]; };
       rodada(function (l) { return l.alvoPct * l.fatorScore; }, capT);
       if (rem > 0) rodada(function (l) { return l.alvoPct; }, capT);
+      rem += guardado;
     }
 
     // 6. execução em lotes
@@ -440,18 +449,23 @@
     });
     function somaTotal() { var s = 0; L.forEach(function (l) { s += l.totalCent; }); return s; }
     function somaBruto() { var s = 0; L.forEach(function (l) { s += l.brutoCent; }); return s; }
+    // "um lote a mais": se alguém tinha necessidade (need > 0), só quem tinha necessidade é candidato
+    // (e sem passar de alvo × T + 1 lote); se todos estavam na meta, vale qualquer alvo > 0 (respeitando o teto).
+    // ativo sem preço não compra nada, então não conta como "alguém com necessidade"
+    var haNecessidade = L.some(function (l) { return l.need > 0 && l.precoCent !== null; });
     for (;;) {
       var livre = disp - somaTotal();
-      var base = V + somaBruto();
       var melhor = null;
       L.forEach(function (l) {
         if (l.precoCent === null || l.alvoPct <= 0) return;
+        if (haNecessidade && l.need <= 0) return;
         var nb = l.brutoCent + l.lote * l.precoCent;
         if (nb > l.teto) return;
+        if (haNecessidade && l.valorAtualCent + nb > l.alvoCent + l.lote * l.precoCent) return;
         var nq = l.qtd + l.lote;
         var nt = nb + taxas({ brutoCent: nb, qtd: nq, taxaFixaCent: fixa, taxaPct: pct });
         if (nt - l.totalCent > livre) return;
-        var dif = (l.valorAtualCent + nb) / (base + l.lote * l.precoCent) * 100 - l.alvoPct;
+        var dif = (l.valorAtualCent + nb) / T * 100 - l.alvoPct;
         var c = { l: l, nb: nb, nq: nq, nt: nt, dif: dif };
         if (!melhor) { melhor = c; return; }
         if (dif < melhor.dif - 1e-9) melhor = c;
@@ -472,9 +486,10 @@
     L.forEach(function (l) { taxasTot += l.taxasCent; });
     if (totalCent > disp) throw new Error('Erro interno: total acima do disponível.');
     var depois = V + brutoTot;
+    // base de "Depois %": a mesma do alvo e do teto — T = V + disponível (a sobra não gasta conta como caixa da carteira)
 
     var linhas = L.map(function (l) {
-      var depoisPct = depois > 0 ? (l.valorAtualCent + l.brutoCent) / depois * 100 : 0;
+      var depoisPct = T > 0 ? (l.valorAtualCent + l.brutoCent) / T * 100 : 0;
       var motivo;
       if (l.precoCent === null) motivo = 'sem preço';
       else if (l.teto !== Infinity && l.brutoCent + l.lote * l.precoCent > l.teto) motivo = 'teto atingido';
@@ -493,7 +508,7 @@
     });
     return {
       linhas: linhas, disponivelCent: disp, totalCent: totalCent, taxasCent: taxasTot,
-      sobraCent: orc - totalCent, totalCarteiraDepoisCent: depois, avisos: avisos
+      sobraCent: orc - totalCent, totalCarteiraDepoisCent: depois, baseDepoisCent: T, avisos: avisos
     };
   }
 

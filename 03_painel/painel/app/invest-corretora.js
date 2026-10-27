@@ -81,6 +81,8 @@
       '.inv-cor-field .pb-in { width: 100%; box-sizing: border-box; min-width: 0; }',
       '.inv-cor-narrow { width: 5.5rem; }',
       '.inv-cor-riscada td { text-decoration: line-through; color: var(--color-fg-muted); }',
+      '.inv-cor-armaz { display: grid; gap: var(--cds-gap-sm); }',
+      '.inv-cor-armaz:empty { display: none; }',
       '.inv-cor-banner { border: 1px solid var(--color-warn); border-radius: var(--cds-radius); padding: var(--cds-pad-xs) var(--cds-pad-sm); margin: 0; font-size: var(--cds-font-size-caption); }',
       '.inv-cor-sub { border-top: 1px solid var(--color-border-line); padding-top: var(--cds-pad-sm); display: grid; gap: var(--cds-gap-sm); }',
       '.inv-cor-row { display: flex; flex-wrap: wrap; gap: var(--cds-gap-sm); align-items: center; }',
@@ -140,6 +142,7 @@
   const S = {
     tipo: 'compra', ticker: null, cot: null, cotCarregando: false, cotErro: '', seq: 0,
     precoManual: false, precoEditado: false, execPrecoTocado: false, qtdTocada: false, taxasTocadas: false,
+    dataTocada: false, cxDataTocada: false,
     editandoId: null, fonteBase: null, editandoCaixa: null,
     todas: false, cancelandoId: null, motivo: '', removendo: null, editandoAtivo: null, errosAtivo: {},
     listaSig: ''
@@ -176,6 +179,7 @@
   /* 1. Resumo */
   R.tiles = h('div', { class: 'pb-tiles' });
   R.avisosResumo = h('div', { 'aria-live': 'polite' });
+  R.avisosArm = h('div', { class: 'inv-cor-armaz', 'aria-live': 'polite' });
   const cResumo = card('Resumo da carteira real',
     h('p', { class: 'pb-note' }, 'Posições reais registradas por você, avaliadas pelo preço de referência (último fechamento disponível ou preço manual). Não é recomendação; material educacional.'),
     R.tiles, R.avisosResumo);
@@ -300,9 +304,21 @@
     h('div', { class: 'inv-cor-row' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => PB.show('config') }, 'Abrir Configurações')),
     R.atLista, R.atForm);
 
-  [cResumo, cPos, cTrade, cAssist, cCaixa, cTx, cAtivos].forEach((c) => sec.appendChild(c));
+  [R.avisosArm, cResumo, cPos, cTrade, cAssist, cCaixa, cTx, cAtivos].forEach((c) => sec.appendChild(c));
 
   function cor(i) { return (window.dash && window.dash.colors && window.dash.colors[i]) || ('var(--c' + i + ')'); }
+
+  /* ---------- aviso de armazenamento (modo privado / só em memória / dados corrompidos): o mesmo de Configurações ---------- */
+  function renderArmazenamento() {
+    let nos = [];
+    if (INV.ui && typeof INV.ui.avisosArmazenamento === 'function') nos = INV.ui.avisosArmazenamento();
+    else {
+      const arm = lerInv(() => INV.armazenamento(), null);
+      if (arm && arm.persistente === false) nos.push(avisoEl('Este navegador não permite gravar dados locais (modo privado ou bloqueio). O app funciona só na memória e tudo se perde ao fechar a página. Em Configurações, use "Exportar backup" para guardar.', 'warn'));
+      if (arm && (arm.corrompido || arm.copiaCorrompida)) nos.push(avisoEl('Havia dados ilegíveis no armazenamento local e o app começou vazio. Veja Configurações para baixar a cópia ou importar um backup.', 'warn'));
+    }
+    R.avisosArm.replaceChildren(...nos);
+  }
 
   /* ---------- renderização: resumo ---------- */
   function renderResumo(d) {
@@ -501,6 +517,7 @@
     S.precoManual = false; S.precoEditado = false; S.execPrecoTocado = false; S.qtdTocada = false; S.taxasTocadas = false;
     F.preco.input.value = ''; F.preco.setErro('');
     F.precoExec.input.value = ''; F.qtdExec.input.value = ''; F.taxasExec.input.value = '';
+    renovarData();
     renderInfo(); renderCot(); sincronizar();
     if (t) buscarCot(false);
   }
@@ -562,7 +579,7 @@
     S.editandoId = null; S.fonteBase = null; S.ticker = null; S.cot = null; S.cotErro = ''; S.seq++; S.cotCarregando = false;
     S.precoManual = S.precoEditado = S.execPrecoTocado = S.qtdTocada = S.taxasTocadas = false;
     [F.ativo, F.preco, F.valor, F.precoExec, F.qtdExec, F.taxasExec, F.obs].forEach((f) => { f.input.value = ''; f.setErro(''); });
-    F.data.input.value = agoraLocal(); R.confirma.checked = false;
+    S.dataTocada = false; F.data.input.value = agoraLocal(); R.confirma.checked = false;
     R.erros.hidden = true; R.erros.textContent = ''; R.banner.hidden = true;
     R.ok.textContent = msg || '';
     marcarTipo(); renderInfo(); renderCot(); sincronizar();
@@ -600,6 +617,17 @@
     R.erros.hidden = false;
   }
 
+  // A data/hora padrão acompanha o relógio: é renovada ao escolher o ativo e ao focar o formulário, a menos que o usuário a tenha editado.
+  function renovarData() {
+    if (!S.dataTocada && !S.editandoId) F.data.input.value = agoraLocal();
+  }
+  function renovarDataCaixa() {
+    if (!S.cxDataTocada && !S.editandoCaixa) FC.data.input.value = agoraLocal();
+  }
+  F.data.input.addEventListener('input', () => { S.dataTocada = true; });
+  FC.data.input.addEventListener('input', () => { S.cxDataTocada = true; });
+  R.formReg.addEventListener('focusin', renovarData);
+  R.cxForm.addEventListener('focusin', renovarDataCaixa);
   F.ativo.input.addEventListener('input', () => { selecionar(resolverTicker(F.ativo.input.value)); });
   F.ativo.input.addEventListener('change', () => {
     const t = resolverTicker(F.ativo.input.value);
@@ -634,7 +662,7 @@
     F.preco.input.value = inCents(tx.precoCent); F.precoExec.input.value = inCents(tx.precoCent);
     F.valor.input.value = inCents(tx.qtd * tx.precoCent);
     F.qtdExec.input.value = String(tx.qtd); F.taxasExec.input.value = inCents(tx.taxasCent);
-    F.data.input.value = String(tx.data || '').slice(0, 16); F.obs.input.value = tx.obs || '';
+    F.data.input.value = String(tx.data || '').slice(0, 16); F.obs.input.value = tx.obs || ''; S.dataTocada = true;
     S.precoManual = true; S.qtdTocada = true; S.taxasTocadas = true;
     R.banner.hidden = false;
     R.banner.textContent = 'Corrigindo a transação de ' + fmtDH(tx.data) + ' (' + (TIPOS[tx.tipo] || tx.tipo) + ' ' + tx.ticker + '). Ao salvar, ela é substituída por uma nova; o original fica no histórico.';
@@ -645,7 +673,7 @@
 
   /* ---------- caixa ---------- */
   function limparCaixa(msg) {
-    S.editandoCaixa = null; FC.valor.input.value = ''; FC.obs.input.value = ''; FC.data.input.value = agoraLocal();
+    S.editandoCaixa = null; S.cxDataTocada = false; FC.valor.input.value = ''; FC.obs.input.value = ''; FC.data.input.value = agoraLocal();
     FC.tipo.input.value = 'deposito'; FC.valor.setErro(''); FC.data.setErro('');
     R.cxBanner.hidden = true; R.cxCancel.hidden = true; R.cxBtn.textContent = 'Registrar'; R.cxErro.hidden = true;
     R.cxMsg.className = 'pb-note pos'; R.cxMsg.textContent = msg || ''; R.cxAviso.textContent = '';
@@ -678,7 +706,7 @@
   function carregarCorrecaoCaixa(tx) {
     limparCaixa('');
     S.editandoCaixa = tx.id;
-    FC.tipo.input.value = tx.tipo; FC.valor.input.value = inCents(tx.valorCent); FC.data.input.value = String(tx.data || '').slice(0, 16); FC.obs.input.value = tx.obs || '';
+    FC.tipo.input.value = tx.tipo; FC.valor.input.value = inCents(tx.valorCent); FC.data.input.value = String(tx.data || '').slice(0, 16); FC.obs.input.value = tx.obs || ''; S.cxDataTocada = true;
     R.cxBanner.hidden = false; R.cxBanner.textContent = 'Corrigindo ' + (TIPOS[tx.tipo] || tx.tipo).toLowerCase() + ' de ' + fmtDH(tx.data) + '. Ao salvar, ela é substituída por uma nova.';
     R.cxCancel.hidden = false; R.cxBtn.textContent = 'Salvar correção';
     FC.valor.input.scrollIntoView({ block: 'center', behavior: 'smooth' }); FC.valor.input.focus();
@@ -712,7 +740,7 @@
       if (efetiva && t.tipo !== 'cancelamento') {
         acoes.append(
           h('button', { type: 'button', class: 'pb-btn', 'aria-label': 'Corrigir ' + descTx(t), onclick: () => (t.tipo === 'compra' || t.tipo === 'venda') ? carregarCorrecao(t) : carregarCorrecaoCaixa(t) }, 'Corrigir'), ' ',
-          h('button', { type: 'button', class: 'pb-btn', 'aria-label': 'Cancelar ' + descTx(t), onclick: () => { S.cancelandoId = t.id; S.motivo = ''; renderTxs(dados()); const i = document.getElementById('cor-motivo'); if (i) i.focus(); } }, 'Cancelar'));
+          h('button', { type: 'button', class: 'pb-btn', 'data-cancelar': t.id, 'aria-label': 'Cancelar ' + descTx(t), onclick: () => { S.cancelandoId = t.id; S.motivo = ''; renderTxs(dados()); const i = document.getElementById('cor-motivo'); if (i) i.focus(); } }, 'Cancelar'));
       }
       tbody.appendChild(h('tr', { class: subst ? 'inv-cor-riscada' : '' },
         h('td', { class: 'l' }, fmtDH(t.data)), h('td', { class: 'l' }, TIPOS[t.tipo] || t.tipo), h('td', { class: 'l' }, t.ticker || '—'),
@@ -724,16 +752,31 @@
         const mot = h('input', { class: 'pb-in', id: 'cor-motivo', type: 'text', value: S.motivo, maxlength: 200 });
         mot.addEventListener('input', () => { S.motivo = mot.value; });
         const err = h('small', { class: 'inv-err', id: 'cor-motivo-er', hidden: true });
-        const conf = () => {
-          if (!S.motivo.trim()) { err.textContent = 'Informe o motivo do cancelamento.'; err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); mot.focus(); return; }
-          try { INV.cancelarTx(t.id, S.motivo.trim()); S.cancelandoId = null; S.motivo = ''; R.txMsg.className = 'pb-note pos'; R.txMsg.textContent = 'Cancelado: ' + descTx(t) + '.'; renderTxs(dados()); }
-          catch (e) { err.textContent = msgErro(e); err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); }
+        // Fecha a linha de cancelamento: tira o foco do campo ANTES de redesenhar (renderTxs não redesenha enquanto há foco num campo)
+        // e devolve o foco a um lugar previsível.
+        const fechar = (msgOk) => {
+          S.cancelandoId = null; S.motivo = '';
+          if (document.activeElement && document.activeElement.blur && R.tabTx.contains(document.activeElement)) document.activeElement.blur();
+          if (msgOk) { R.txMsg.className = 'pb-note pos'; R.txMsg.textContent = msgOk; }
+          renderTxs(dados());
+          if (msgOk) { R.txMsg.setAttribute('tabindex', '-1'); R.txMsg.focus(); }
+          else { const b = R.tabTx.querySelector('button[data-cancelar="' + t.id + '"]'); if (b) b.focus(); }
         };
-        mot.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); conf(); } else if (ev.key === 'Escape') { S.cancelandoId = null; renderTxs(dados()); } });
+        const conf = () => {
+          if (S.cancelandoId !== t.id) return;   // linha já fechada (Esc, Voltar ou outro cancelamento)
+          if (!S.motivo.trim()) { err.textContent = 'Informe o motivo do cancelamento.'; err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); mot.focus(); return; }
+          try { INV.cancelarTx(t.id, S.motivo.trim()); }
+          catch (e) { err.textContent = msgErro(e); err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); return; }
+          fechar('Cancelado: ' + descTx(t) + '.');
+        };
+        mot.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') { ev.preventDefault(); conf(); }
+          else if (ev.key === 'Escape') { ev.preventDefault(); fechar(''); }
+        });
         tbody.appendChild(h('tr', null, h('td', { class: 'l', colspan: 10 },
           h('div', { class: 'inv-cor-row' }, h('label', { for: 'cor-motivo' }, 'Motivo do cancelamento de ' + descTx(t)), mot,
             h('button', { type: 'button', class: 'pb-btn', onclick: conf }, 'Confirmar cancelamento'),
-            h('button', { type: 'button', class: 'pb-btn', onclick: () => { S.cancelandoId = null; renderTxs(dados()); } }, 'Voltar')), err)));
+            h('button', { type: 'button', class: 'pb-btn', onclick: () => fechar('') }, 'Voltar')), err)));
       }
     });
     R.tabTx.replaceChildren(h('table', { class: 'pb-table', 'aria-label': 'Transações' }, thead, tbody));
@@ -810,7 +853,7 @@
     let d;
     try { d = dados(); } catch (e) { R.tiles.replaceChildren(avisoEl('Não foi possível ler os dados da carteira: ' + msgErro(e), 'bad')); return; }
     D = d;
-    const passos = [() => atualizarLista(), () => renderResumo(d), () => renderPosicoes(d), () => renderGrafico(d), () => renderInfo(), () => sincronizar(), () => renderCaixa(d), () => renderTxs(d), () => renderAtivos(d)];
+    const passos = [() => renderArmazenamento(), () => atualizarLista(), () => renderResumo(d), () => renderPosicoes(d), () => renderGrafico(d), () => renderInfo(), () => sincronizar(), () => renderCaixa(d), () => renderTxs(d), () => renderAtivos(d)];
     passos.forEach((fn) => { try { fn(); } catch (e) { if (window.console) console.error('[corretora]', e); } });
   }
   let agendado = false;

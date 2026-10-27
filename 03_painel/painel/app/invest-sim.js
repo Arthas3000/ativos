@@ -500,14 +500,14 @@
       'aria-label': 'Gráfico de linhas: valor da carteira, total investido' + (R.bench.ibov ? ', Ibovespa' : '') + (R.bench.cdi ? ', CDI' : '') + ' entre ' + fmtData(r.inicioEfetivo) + ' e ' + fmtData(r.fimEfetivo) + '. Os valores finais estão nas tabelas abaixo.' });
     var cardGraf = h('div', { class: 'pb-card' }, h('h2', null, 'Evolução do patrimônio'), legenda, chartBox);
 
-    var cols1 = [{ t: 'Ativo', l: true }, { t: 'Investido' }, { t: 'Valor final' }, { t: 'Lucro' }, { t: 'Dividendos', sm: true }, { t: 'Contribuição', sm: true }, { t: 'Retorno de preço' }];
+    var cols1 = [{ t: 'Ativo', l: true }, { t: 'Comprado' }, { t: 'Valor final' }, { t: 'Lucro' }, { t: 'Dividendos', sm: true }, { t: 'Contribuição', sm: true }, { t: 'Retorno de preço' }];
     var linhas1 = (r.porAtivo || []).map(function (a) {
       return [{ v: a.ticker, c: '' }, money(a.investido), money(a.valorFinal), { v: money(a.lucro), c: sgn(a.lucro) }, money(a.dividendos),
         a.contribuicaoPct === null || a.contribuicaoPct === undefined ? '—' : { v: pct(a.contribuicaoPct, 1), c: sgn(a.contribuicaoPct) },
         { v: pct(a.retornoPrecoPct), c: sgn(a.retornoPrecoPct) }];
     });
     var cardAt = h('div', { class: 'pb-card' }, h('h2', null, 'Por ativo'), tabela(cols1, linhas1, 'Resultado por ativo'),
-      h('p', { class: 'pb-note' }, 'Retorno de preço = variação do fechamento entre o início e o fim efetivos, sem dividendos.'));
+      h('p', { class: 'pb-note' }, 'Comprado: inclui dividendos reinvestidos e caixa reaplicado; o total investido está no resumo. Retorno de preço = variação do fechamento entre o início e o fim efetivos, sem dividendos.'));
 
     var cols2 = [{ t: 'Comparação', l: true }, { t: 'Valor final' }, { t: 'Lucro' }, { t: 'Retorno s/ investido' }, { t: 'TWR', sm: true }, { t: 'XIRR a.a.', sm: true }];
     var linhas2 = [[{ v: 'Sua carteira simulada', c: '' }, money(s.valorFinal), { v: money(s.lucro), c: sgn(s.lucro) }, { v: pct(s.retornoAcumulado), c: sgn(s.retornoAcumulado) }, pct(s.twr), s.xirr === null || s.xirr === undefined ? '—' : pctPlain(s.xirr)]];

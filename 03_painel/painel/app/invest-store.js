@@ -55,7 +55,8 @@
   };
 
   // Aceita valores ausentes (usa o padrão); lança Error se algo presente estiver malformado.
-  function normalizar(raw, estrito) {
+  // estrito = importação de backup (rejeita o que é duvidoso); avisos (array) recebe avisos não fatais da importação.
+  function normalizar(raw, estrito, avisos) {
     if (!isObj(raw)) throw new Error('Formato inválido: esperado um objeto.');
     if (raw.schema !== undefined && raw.schema !== 1) throw new Error('Versão de dados não suportada (schema ' + raw.schema + ').');
     const s = padrao();
@@ -70,11 +71,13 @@
     if (raw.ativosCustom !== undefined) {
       if (!Array.isArray(raw.ativosCustom)) throw new Error('Lista de ativos personalizados inválida.');
       const vistos = new Set();
+      const doPainel = estrito ? painelTickers() : null;
       raw.ativosCustom.forEach((a, i) => {
         if (!isObj(a)) throw new Error('Ativo personalizado #' + (i + 1) + ' inválido.');
         if (typeof a.ticker !== 'string' || !RE_TICKER.test(a.ticker)) throw new Error('Ativo personalizado #' + (i + 1) + ': ticker inválido.');
         if (vistos.has(a.ticker)) throw new Error('Ativo personalizado duplicado: ' + a.ticker + '.');
         vistos.add(a.ticker);
+        if (doPainel && doPainel.has(a.ticker)) throw new Error(a.ticker + ' já faz parte dos 20 ativos do painel e não pode ser um ativo personalizado.');
         if (!CLASSES.includes(a.classe)) throw new Error(a.ticker + ': classe inválida.');
         if (a.moeda !== undefined && a.moeda !== 'BRL') throw new Error(a.ticker + ': só há suporte a ativos em BRL.');
         const lote = a.lote === undefined ? 1 : num(a.lote, a.ticker + ': lote', { int: true, min: 1 });
@@ -124,8 +127,20 @@
       });
     }
     if (raw.rascunhos !== undefined) {
-      if (!isObj(raw.rascunhos)) throw new Error('Rascunhos inválidos.');
-      s.rascunhos = clone(raw.rascunhos);
+      // Rascunhos são só conveniência: o que estiver malformado é descartado (com aviso na importação), nunca bloqueia.
+      const aviso = (m) => { if (estrito && avisos) avisos.push(m); };
+      if (!isObj(raw.rascunhos)) aviso('Os rascunhos do arquivo estavam num formato inválido e foram descartados.');
+      else {
+        let tam = 0;
+        Object.keys(raw.rascunhos).forEach((k) => {
+          const v = raw.rascunhos[k];
+          let txt = null;
+          if (isObj(v)) { try { txt = JSON.stringify(v); } catch (e) { txt = null; } }
+          if (txt === null || tam + txt.length > 200000) { aviso('O rascunho "' + k + '" estava inválido ou grande demais e foi descartado.'); return; }
+          tam += txt.length;
+          s.rascunhos[k] = JSON.parse(txt);
+        });
+      }
     }
     return s;
   }
@@ -159,6 +174,14 @@
   }
   estado = lerStorage() || padrao();
 
+  // Outra aba pode ter gravado depois da nossa leitura: antes de qualquer mudança, relê o armazenamento persistente
+  // (estado = lerStorage() || estado) para duas abas não se sobrescreverem.
+  function atualizarDoStorage() {
+    if (memOnly) return;
+    const lido = lerStorage();
+    if (lido) estado = lido;
+  }
+
   const ouvintes = {};
   function on(ev, fn) {
     (ouvintes[ev] = ouvintes[ev] || []).push(fn);
@@ -175,11 +198,13 @@
       }
     }
     estado = novo;
+    if (!memOnly) corrompido = false;   // o armazenamento agora tem dados válidos (a cópia dos ilegíveis continua guardada)
     if (!silencioso) emit('mudou', { origem: origem || 'salvar' });
   }
 
   function salvar(mutador, opcoes) {
     if (typeof mutador !== 'function') throw new Error('salvar: informe uma função.');
+    atualizarDoStorage();
     const copia = clone(estado);
     mutador(copia);
     let novo;
@@ -204,11 +229,12 @@
     try { raw = JSON.parse(texto); } catch (e) { throw new Error('O arquivo não é um JSON válido.'); }
     if (!isObj(raw) || raw.app !== 'painel-b3-invest') throw new Error('Este arquivo não parece um backup deste painel (campo "app" ausente ou diferente).');
     let novo;
-    try { novo = normalizar(raw, true); } catch (e) { throw new Error('Backup inválido: ' + e.message); }
+    const avisos = [];
+    try { novo = normalizar(raw, true, avisos); } catch (e) { throw new Error('Backup inválido: ' + e.message); }
     const erros = validarLivro(novo.transacoes);
     if (erros.length) throw new Error('Backup inconsistente: ' + erros.slice(0, 3).join(' | ') + (erros.length > 3 ? ' (e mais ' + (erros.length - 3) + ')' : ''));
     return { estado: novo, exportadoEm: typeof raw.exportadoEm === 'string' ? raw.exportadoEm : null,
-      resumo: { transacoes: novo.transacoes.length, ativos: novo.ativosCustom.length } };
+      resumo: { transacoes: novo.transacoes.length, ativos: novo.ativosCustom.length, avisos } };
   }
   function importar(texto) {
     const a = analisarImport(texto);
@@ -218,10 +244,32 @@
   function apagarTudo() {
     const novo = padrao();
     if (!memOnly) {
-      try { localStorage.removeItem(KEY); } catch (e) { throw new Error('Não foi possível apagar os dados do navegador.'); }
+      try { localStorage.removeItem(KEY); localStorage.removeItem(KEY_CORROMPIDO); } catch (e) { throw new Error('Não foi possível apagar os dados do navegador.'); }
     }
+    corrompido = false;
     estado = novo;
     emit('mudou', { origem: 'apagar' });
+  }
+
+  // Cópia dos dados ilegíveis (guardada por lerStorage em KEY_CORROMPIDO) para o usuário poder baixá-la.
+  function copiaCorrompida() {
+    if (memOnly) return null;
+    try { return localStorage.getItem(KEY_CORROMPIDO); } catch (e) { return null; }
+  }
+  function baixarCopiaCorrompida() {
+    const txt = copiaCorrompida();
+    if (txt === null) throw new Error('Não há cópia de dados corrompidos neste navegador.');
+    const nome = 'painel-b3-dados-corrompidos-' + hoje() + '.json';
+    const url = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return nome;
+  }
+  function descartarCopiaCorrompida() {
+    try { localStorage.removeItem(KEY_CORROMPIDO); } catch (e) { throw new Error('Não foi possível apagar a cópia dos dados corrompidos.'); }
+    emit('mudou', { origem: 'descartar-copia' });
   }
 
   // ---------------------------------------------------------------- transações
@@ -245,21 +293,37 @@
     salvar((s) => { s.transacoes.push(t); });
     return clone(t);
   }
+  // Recusa data além de agora + 1 dia (folga para fuso horário). Aceita 'AAAA-MM-DD' e 'AAAA-MM-DDTHH:MM' (hora local).
+  function erroDataFutura(t) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(String(t.data || ''));
+    if (!m) return null;
+    const quando = new Date(+m[1], +m[2] - 1, +m[3], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0).getTime();
+    if (Number.isFinite(quando) && quando > Date.now() + 864e5) {
+      return 'A data da operação (' + INV.ui.fmtDataHora(t.data) + ') está no futuro. Registre apenas operações que já aconteceram: corrija a data.';
+    }
+    return null;
+  }
   function adicionarTx(tx) {
+    atualizarDoStorage();
     const t = prepararTx(tx);
     t.substitui = null;
+    const futuro = erroDataFutura(t);
+    if (futuro) throw new Error(futuro);
     const erros = C().validarTx(t, { posicoes: C().posicoes(C().efetivas(estado.transacoes)) });
     if (erros && erros.length) throw new Error(erros.join(' '));
     return gravarTx(t, estado.transacoes.concat([t]));
   }
   function adicionarTxs(lista) {
     if (!Array.isArray(lista) || !lista.length) throw new Error('Nenhuma transação para registrar.');
+    atualizarDoStorage();
     const acumulado = estado.transacoes.slice();
     const novas = [], erros = [];
     lista.forEach((tx, i) => {
       const t = prepararTx(tx);
       t.substitui = null;
-      const e = C().validarTx(t, { posicoes: C().posicoes(C().efetivas(acumulado)) });
+      const e = C().validarTx(t, { posicoes: C().posicoes(C().efetivas(acumulado)) }) || [];
+      const futuro = erroDataFutura(t);
+      if (futuro) e.push(futuro);
       if (e && e.length) erros.push('Item ' + (i + 1) + (t.ticker ? ' (' + t.ticker + ')' : '') + ': ' + e.join(' '));
       else { novas.push(t); acumulado.push(t); }
     });
@@ -270,16 +334,20 @@
     return clone(novas);
   }
   function corrigirTx(idAntigo, txNova) {
+    atualizarDoStorage();
     const orig = achar(idAntigo);
     checarSubstituivel(orig, idAntigo);
     const t = prepararTx(txNova);
     t.substitui = idAntigo;
+    const futuro = erroDataFutura(t);
+    if (futuro) throw new Error(futuro);
     const base = C().efetivas(estado.transacoes).filter((x) => x.id !== idAntigo);
     const erros = C().validarTx(t, { posicoes: C().posicoes(base) });
     if (erros && erros.length) throw new Error(erros.join(' '));
     return gravarTx(t, estado.transacoes.concat([t]));
   }
   function cancelarTx(id, motivo) {
+    atualizarDoStorage();
     const orig = achar(id);
     checarSubstituivel(orig, id);
     const t = prepararTx({ tipo: 'cancelamento', ticker: orig.ticker, data: agoraLocal(), qtd: 0, precoCent: 0, taxasCent: 0, valorCent: 0,
@@ -294,6 +362,7 @@
   const temMovimento = (ticker) => C().efetivas(estado.transacoes).some((t) => t.ticker === ticker);
   const ativoCustom = {
     adicionar(a) {
+      atualizarDoStorage();
       a = a || {};
       const v = C().validarTicker(a.ticker);
       if (!v || !v.ok) throw new Error((v && v.erro) || 'Ticker inválido. Use o formato PETR4 ou HGLG11.');
@@ -311,6 +380,7 @@
       return INV.ativo(ticker);
     },
     editar(ticker, campos) {
+      atualizarDoStorage();
       ticker = String(ticker || '').toUpperCase();
       if (!estado.ativosCustom.some((x) => x.ticker === ticker)) throw new Error(ticker + ' não é um ativo personalizado.');
       campos = campos || {};
@@ -327,6 +397,7 @@
       return INV.ativo(ticker);
     },
     remover(ticker) {
+      atualizarDoStorage();
       ticker = String(ticker || '').toUpperCase();
       if (!estado.ativosCustom.some((x) => x.ticker === ticker)) throw new Error(ticker + ' não é um ativo personalizado.');
       const pos = C().posicoes(C().efetivas(estado.transacoes));
@@ -385,7 +456,8 @@
       ticker: r.ticker, nome: r.nome, classe: r.classe, segmento: r.segmento || '—', lote: lp,
       score: Number.isFinite(r.score) ? r.score : null, sinal: r.sinal || null
     })));
-    estado.ativosCustom.forEach((c) => mapa.set(c.ticker, base({ ticker: c.ticker, nome: c.nome, classe: c.classe, lote: c.lote, custom: true })));
+    // Um personalizado com o ticker de um dos 20 do painel nunca sobrescreve a entrada do painel.
+    estado.ativosCustom.forEach((c) => mapa.has(c.ticker) || mapa.set(c.ticker, base({ ticker: c.ticker, nome: c.nome, classe: c.classe, lote: c.lote, custom: true })));
     const sa = (sd && sd.ativos) || {};
     Object.keys(sa).forEach((t) => {
       if (t === 'IBOV') return;
@@ -408,15 +480,18 @@
     ticker = String(ticker || '').toUpperCase();
     const pre = prefixo || '';
     const res = (precoCent, em, fonte, estadoP, msg) => ({ ticker, precoCent, em, fonte, estado: estadoP, mensagem: pre + msg });
-    // 2) último fechamento do Actions
+    // 2) último fechamento: o de data MAIS RECENTE entre serie_longa e ativos.json (parametros.data_ref).
+    // A série pode estar defasada se o comando "historico" manteve a anterior após uma falha.
     let em = null, valor = null;
     const sa = fontes.serie.data && fontes.serie.data.ativos && fontes.serie.data.ativos[ticker];
     if (sa && Array.isArray(sa.d) && sa.d.length && Array.isArray(sa.c) && sa.c.length === sa.d.length) {
       em = sa.d[sa.d.length - 1]; valor = sa.c[sa.c.length - 1];
-    } else {
-      const r = (W.dash.data('ativos').data || []).find((x) => x.ticker === ticker);
-      const p = W.dash.data('parametros');
-      if (r && Number.isFinite(r.preco_atual) && p.status === 'ok' && p.data && p.data[0]) { em = p.data[0].data_ref; valor = r.preco_atual; }
+    }
+    const r = (W.dash.data('ativos').data || []).find((x) => x.ticker === ticker);
+    const p = W.dash.data('parametros');
+    if (r && Number.isFinite(r.preco_atual) && p.status === 'ok' && p.data && p.data[0]) {
+      const dr = p.data[0].data_ref;
+      if (typeof dr === 'string' && RE_DATA.test(dr) && (em === null || dr.slice(0, 10) > String(em).slice(0, 10))) { em = dr.slice(0, 10); valor = r.preco_atual; }
     }
     const cent = valor === null ? null : C().toCents(valor);
     if (cent !== null && cent > 0 && em) {
@@ -433,9 +508,10 @@
   }
 
   const token = {
+    // O token nunca é registrado em console. Se o localStorage falhar (ou não tiver o valor), vale o da memória.
     ler() {
       if (memOnly) return memToken;
-      try { return localStorage.getItem(TKEY) || ''; } catch (e) { return memToken; }
+      try { return localStorage.getItem(TKEY) || memToken; } catch (e) { return memToken; }
     },
     salvar(t) {
       t = String(t || '').trim();
@@ -613,6 +689,44 @@
     return el('span', { class: 'inv-chip inv-chip-' + e, title: (cot && cot.mensagem) || '' }, partes.join(' · '));
   }
 
+  // Avisos de armazenamento (modo privado / dados só em memória / dados corrompidos), iguais em todas as abas.
+  // Devolve uma lista de nós DOM (vazia se está tudo bem). Os botões da cópia corrompida vêm junto.
+  function avisosArmazenamento() {
+    const arm = {
+      persistente: !memOnly, corrompido, copiaCorrompida: copiaCorrompida() !== null
+    };
+    const out = [];
+    if (!arm.persistente) {
+      out.push(aviso('Este navegador não permite gravar dados locais (modo privado ou bloqueio). O app funciona só na memória e tudo se perde ao fechar a página. Em Configurações, use "Exportar backup" para guardar.', 'warn'));
+    }
+    if (arm.corrompido || arm.copiaCorrompida) {
+      const msg = el('div', { 'aria-live': 'polite' });
+      const acoes = el('div', { class: 'inv-actions' });
+      const mostrar = (n) => { msg.replaceChildren(n); };
+      const botoes = () => {
+        acoes.replaceChildren(
+          el('button', { type: 'button', class: 'pb-btn', onclick: () => {
+            try { mostrar(aviso('Cópia baixada: ' + baixarCopiaCorrompida() + '.', 'ok')); } catch (e) { mostrar(aviso(e.message, 'bad')); }
+          } }, 'Baixar cópia dos dados corrompidos'),
+          el('button', { type: 'button', class: 'pb-btn', onclick: () => {
+            acoes.replaceChildren(
+              el('span', { class: 'pb-note' }, 'Descartar a cópia apaga os dados ilegíveis deste navegador de vez.'),
+              el('button', { type: 'button', class: 'pb-btn', onclick: () => {
+                try { descartarCopiaCorrompida(); } catch (e) { mostrar(aviso(e.message, 'bad')); botoes(); }
+              } }, 'Confirmar descarte'),
+              el('button', { type: 'button', class: 'pb-btn', onclick: botoes }, 'Manter'));
+          } }, 'Descartar cópia'));
+      };
+      if (arm.copiaCorrompida) botoes();
+      out.push(el('div', { style: 'display:grid;gap:var(--cds-gap-xs)' },
+        aviso(arm.copiaCorrompida
+          ? 'Havia dados ilegíveis no armazenamento local. Uma cópia foi mantida neste navegador (baixe-a abaixo) e o app começou vazio; se tiver um backup, importe-o em Configurações.'
+          : 'Havia dados ilegíveis no armazenamento local e o app começou vazio; se tiver um backup, importe-o em Configurações.', 'warn'),
+        arm.copiaCorrompida ? acoes : null, msg));
+    }
+    return out;
+  }
+
   // colunas: [{rotulo, chave?, render?(linha, i), alinhar?: 'l'|'r', classe?}]
   function tabela(colunas, linhas, opcoes) {
     const cls = (c) => [c.alinhar === 'l' ? 'l' : '', c.classe || ''].filter(Boolean).join(' ') || null;
@@ -747,8 +861,9 @@
     adicionarTx, adicionarTxs, corrigirTx, cancelarTx, ativoCustom, definirAlvo,
     carregar, serie, indices, universo, ativo, cotacao,
     precoReferencia: (t) => precoRef(t, ''), token, aba, aoMostrar,
-    armazenamento: () => ({ persistente: !memOnly, corrompido }),
-    ui: { el, campo, aviso, estadoPreco, tabela, parseNumero, fmtData, fmtDataHora, seletorAtivo, agoraLocal, hoje }
+    armazenamento: () => ({ persistente: !memOnly, corrompido, copiaCorrompida: copiaCorrompida() !== null }),
+    copiaCorrompida, baixarCopiaCorrompida, descartarCopiaCorrompida,
+    ui: { el, campo, aviso, estadoPreco, tabela, parseNumero, fmtData, fmtDataHora, seletorAtivo, agoraLocal, hoje, avisosArmazenamento }
   };
   W.INV = INV;
 
@@ -926,13 +1041,14 @@
         const a = analisarImport(txt);
         textoPendente = txt;
         status(stImport, av('Arquivo válido' + (a.exportadoEm ? ' (exportado em ' + fmtDataHora(a.exportadoEm) + ')' : '') + ': ' + a.resumo.transacoes + ' transações e ' + a.resumo.ativos
-          + ' ativos personalizados. Importar vai SUBSTITUIR todos os dados atuais deste aparelho (' + estado.transacoes.length + ' transações, ' + estado.ativosCustom.length + ' ativos personalizados).', 'warn'));
+          + ' ativos personalizados. Importar vai SUBSTITUIR todos os dados atuais deste aparelho (' + estado.transacoes.length + ' transações, ' + estado.ativosCustom.length + ' ativos personalizados).'
+          + (a.resumo.avisos.length ? ' Avisos: ' + a.resumo.avisos.join(' ') : ''), 'warn'));
         confirma.replaceChildren(
           el('button', { type: 'button', class: 'pb-btn', onclick: () => {
             try {
               const r = importar(textoPendente);
               limparImport();
-              status(stImport, av('Dados substituídos: ' + r.transacoes + ' transações e ' + r.ativos + ' ativos personalizados.', 'ok'));
+              status(stImport, av('Dados substituídos: ' + r.transacoes + ' transações e ' + r.ativos + ' ativos personalizados.' + (r.avisos.length ? ' Avisos: ' + r.avisos.join(' ') : ''), 'ok'));
             } catch (e) { status(stImport, av(e.message, 'bad')); }
           } }, 'Substituir dados'),
           el('button', { type: 'button', class: 'pb-btn', onclick: () => { limparImport(); status(stImport, av('Importação cancelada. Nada foi alterado.', 'info')); } }, 'Cancelar'));
@@ -1013,10 +1129,7 @@
     preencherCustos();
 
     aoMostrar('config', () => {
-      const arm = INV.armazenamento();
-      status(avisoArm,
-        !arm.persistente ? av('Este navegador não permite gravar dados locais (modo privado ou bloqueio). O app funciona só na memória e tudo se perde ao fechar a página. Use "Exportar backup" para guardar.', 'warn') : null,
-        arm.corrompido ? av('Havia dados ilegíveis no armazenamento local. Uma cópia foi mantida e o app começou vazio; se tiver um backup, importe-o abaixo.', 'warn') : null);
+      status(avisoArm, ...avisosArmazenamento());
       if (!sujo) preencherCustos();
       desenharExtras();
       desenharFontes();

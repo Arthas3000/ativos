@@ -14,28 +14,86 @@
   var S = null;           // rascunho
   var plano = null;       // resultado de planejarAportes (não persiste)
   var erroPlano = null;
-  var ui = { busca: '', buscando: false, msgCot: '', resultado: null, erros5: [], mostrarErros2: false, pendente: false, erroReg: '' };
+  var ui = { avisoRascunho: '', busca: '', buscando: false, msgCot: '', resultado: null, erros5: [], mostrarErros2: false, pendente: false, erroReg: '' };
   var salvandoTimer = null, ignorarMudou = false;
 
   function novoRascunho() {
     return { passo: 1, sel: [], orcamento: '', orcamentoEditado: false, reserva: '', alvos: {}, tetos: {},
       salvarAlvos: false, intens: null, taxaFixa: null, taxaPct: null, precos: {}, qtdEdit: {}, exec: {}, confirma: false };
   }
+  function ehObj(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
+  function ehStr(x) { return typeof x === 'string'; }
+  function strOuNull(x) { return x === null || typeof x === 'string'; }
+  function mapaDe(x, ok) {            // objeto { chave: valor } cujos valores passam em ok()
+    if (!ehObj(x)) return false;
+    return Object.keys(x).every(function (k) { return ok(x[k]); });
+  }
+  /** Valida o tipo de cada chave do rascunho salvo. Devolve o rascunho limpo ou null se algo estiver fora do formato. */
+  function validarRascunho(r) {
+    if (!ehObj(r)) return null;
+    var base = novoRascunho(), ok = true;
+    function pegar(k, valido) {
+      if (r[k] === undefined || r[k] === null) return;        // ausente: padrão
+      if (valido(r[k])) base[k] = r[k]; else ok = false;
+    }
+    pegar('passo', function (v) { return typeof v === 'number' && isFinite(v) && Math.floor(v) === v && v >= 1 && v <= 5; });
+    pegar('sel', function (v) { return Array.isArray(v) && v.every(ehStr); });
+    pegar('orcamento', ehStr);
+    pegar('orcamentoEditado', function (v) { return typeof v === 'boolean'; });
+    pegar('reserva', ehStr);
+    pegar('alvos', function (v) { return mapaDe(v, ehStr); });
+    pegar('tetos', function (v) { return mapaDe(v, ehStr); });
+    pegar('salvarAlvos', function (v) { return typeof v === 'boolean'; });
+    pegar('intens', strOuNull);
+    pegar('taxaFixa', strOuNull);
+    pegar('taxaPct', strOuNull);
+    pegar('precos', function (v) {
+      return mapaDe(v, function (p) { return ehObj(p) && ehStr(p.txt) && (p.manual === undefined || typeof p.manual === 'boolean'); });
+    });
+    pegar('qtdEdit', function (v) { return mapaDe(v, function (n) { return typeof n === 'number' && isFinite(n) && Math.floor(n) === n && n >= 0; }); });
+    pegar('exec', function (v) {
+      return mapaDe(v, function (e) { return ehObj(e) && (e.marcado === undefined || typeof e.marcado === 'boolean') && (e.preco === undefined || ehStr(e.preco)) && (e.qtd === undefined || ehStr(e.qtd)); });
+    });
+    pegar('confirma', function (v) { return typeof v === 'boolean'; });
+    if (!ok) return null;
+    // só preços digitados pelo usuário (manuais) vêm do rascunho; os demais são recalculados
+    var pm = {};
+    Object.keys(base.precos).forEach(function (t) {
+      var p = base.precos[t];
+      if (p.manual === true && p.txt !== '') pm[t] = { txt: p.txt, manual: true, estado: 'manual', fonte: 'manual', em: null };
+    });
+    base.precos = pm;
+    base.confirma = false;
+    return base;
+  }
   function carregarRascunho() {
-    var base = novoRascunho(), r = null;
-    try { r = INV.estado().rascunhos.assistente; } catch (e) { r = null; }
-    if (r && typeof r === 'object') {
-      Object.keys(base).forEach(function (k) { if (r[k] !== undefined && r[k] !== null) base[k] = r[k]; });
-      if (!Array.isArray(base.sel)) base.sel = [];
+    var base = novoRascunho(), r = null, lido = false;
+    ui.avisoRascunho = '';
+    try { r = INV.estado().rascunhos.assistente; lido = r !== undefined && r !== null; } catch (e) { r = null; }
+    if (lido) {
+      var v = null;
+      try { v = validarRascunho(r); } catch (e) { v = null; }
+      if (v) base = v;
+      else ui.avisoRascunho = 'O rascunho salvo do assistente estava em um formato inválido e foi descartado. Você pode começar de novo.';
     }
     if (base.passo > 3) base.passo = 3;           // o plano não persiste: recalcula a partir do passo 3
     S = base;
+    if (ui.avisoRascunho) persistir(true);        // apaga o rascunho inválido do aparelho
+  }
+  function precosManuais(precos) {                // cotações (ao vivo/atrasado) não vão para o rascunho: ficariam velhas
+    var out = {};
+    Object.keys(precos || {}).forEach(function (t) {
+      var p = precos[t];
+      if (p && p.manual === true && typeof p.txt === 'string' && p.txt !== '') out[t] = { txt: p.txt, manual: true, estado: 'manual', fonte: 'manual', em: null };
+    });
+    return out;
   }
   function persistir(imediato) {
     if (salvandoTimer) clearTimeout(salvandoTimer);
     function gravar() {
       salvandoTimer = null;
       var copia = JSON.parse(JSON.stringify(S));
+      copia.precos = precosManuais(copia.precos);
       ignorarMudou = true;
       try { INV.salvar(function (c) { c.rascunhos = c.rascunhos || {}; c.rascunhos.assistente = copia; }); }
       catch (e) { /* rascunho é conveniência; segue sem ele */ }
@@ -140,7 +198,9 @@
   function css() {
     if (document.getElementById('inv-assistente-css')) return;
     var st = document.createElement('style'); st.id = 'inv-assistente-css';
-    st.textContent = '#inv-assistente .inv-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}' +
+    st.textContent = '#inv-assistente,#inv-assistente .inv-stack{min-width:0}' +
+      '#inv-assistente .pb-tablewrap{position:relative;max-width:100%;overflow-x:auto}' +
+      '#inv-assistente .inv-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}' +
       '#inv-assistente .inv-steps{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);list-style:none;margin:0 0 var(--cds-gap-md);padding:0}' +
       '#inv-assistente .inv-steps li{padding:.25rem .6rem;border:1px solid var(--color-border,currentColor);border-radius:999px;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}' +
       '#inv-assistente .inv-steps li[aria-current="step"]{color:var(--color-fg);font-weight:600;border-color:var(--c0,currentColor)}' +
@@ -208,7 +268,9 @@
   /* linhas da proposta com edição do usuário (recalcula bruto/taxas/total) */
   function linhasEditadas() {
     var tf = taxaFixaCent(), tp = taxaPctVal(), soma = 0, somaBruto = 0, somaTaxas = 0, bad = false;
-    var baseV = plano.totalCarteiraDepoisCent - plano.linhas.reduce(function (s, l) { return s + l.brutoCent; }, 0);
+    // mesma base do alvo e do teto: T = V + disponível (posições selecionadas + outras + aporte desta rodada)
+    var base = plano.baseDepoisCent > 0 ? plano.baseDepoisCent
+      : plano.totalCarteiraDepoisCent - plano.linhas.reduce(function (s, l) { return s + l.brutoCent; }, 0) + plano.disponivelCent;
     var rows = plano.linhas.map(function (l) {
       var q = S.qtdEdit[l.ticker] !== undefined ? S.qtdEdit[l.ticker] : l.qtd;
       var bruto = l.precoCent ? q * l.precoCent : 0;
@@ -216,7 +278,6 @@
       soma += bruto + tx; somaBruto += bruto; somaTaxas += tx;
       return { l: l, qtd: q, bruto: bruto, taxas: tx, total: bruto + tx };
     });
-    var base = baseV + somaBruto;
     rows.forEach(function (r) { r.depoisPct = base > 0 ? (r.l.valorAtualCent + r.bruto) / base * 100 : 0; });
     var orc = CALC.toCents(S.orcamento), disp = plano.disponivelCent;
     return { rows: rows, total: soma, taxas: somaTaxas, sobra: orc - soma, excede: soma > disp, bad: bad, orc: orc, disp: disp, base: base };
@@ -244,12 +305,18 @@
     var foco = manterFoco ? focoAtual() : null;
     if (S.passo >= 3 && !plano && !erroPlano) calcular();
     var corpo;
-    switch (S.passo) {
-      case 1: corpo = passo1(); break;
-      case 2: corpo = passo2(); break;
-      case 3: corpo = passo3(); break;
-      case 4: corpo = passo4(); break;
-      default: corpo = passo5();
+    try {
+      switch (S.passo) {
+        case 1: corpo = passo1(); break;
+        case 2: corpo = passo2(); break;
+        case 3: corpo = passo3(); break;
+        case 4: corpo = passo4(); break;
+        default: corpo = passo5();
+      }
+    } catch (e) {
+      corpo = h('div', { class: 'inv-stack' },
+        aviso('Não foi possível montar este passo (' + ((e && e.message) || 'erro inesperado') + '). Recomece o assistente.', 'bad'),
+        h('div', { class: 'inv-actions' }, btn('Recomeçar', recomecar)));
     }
     var passos = h('ol', { class: 'inv-steps', 'aria-label': 'Passos do assistente' });
     PASSOS.forEach(function (n, i) {
@@ -258,6 +325,7 @@
     var titulo = h('h3', { id: 'inv-asst-titulo', tabindex: '-1' }, 'Passo ' + S.passo + ' de 5 — ' + PASSOS[S.passo - 1]);
     var caixa = h('div', { class: 'pb-card inv-asst' },
       h('p', { class: 'pb-note' }, 'Material educacional; não é recomendação de investimento. O assistente só calcula uma proposta: nada é comprado nem registrado sem a sua confirmação no passo 5.'),
+      ui.avisoRascunho ? aviso(ui.avisoRascunho, 'warn') : null,
       passos, titulo, corpo);
     while (r.firstChild) r.removeChild(r.firstChild);
     r.appendChild(caixa);
@@ -265,6 +333,8 @@
     devolverFoco(foco);
   }
   function irPara(p, focarTitulo) {
+    ui.avisoRascunho = '';
+    if (p === 5) S.confirma = false;              // entrar no passo 5 exige confirmar de novo
     S.passo = p; persistir(true); render(false);
     if (focarTitulo !== false) { var t = document.getElementById('inv-asst-titulo'); if (t) try { t.focus({ preventScroll: false }); } catch (e) { /* ok */ } }
   }
@@ -272,8 +342,9 @@
     return h('div', { class: 'inv-actions' },
       voltar === null ? null : btn('Voltar', voltar),
       avancar === null ? null : btn(extra && extra.rotulo || 'Avançar', avancar, { disabled: extra && extra.bloqueado, desc: extra && extra.desc, cls: 'pb-btn-primary' }),
-      btn('Recomeçar', function () { plano = null; erroPlano = null; ui.resultado = null; S = novoRascunho(); persistir(true); render(false); }));
+      btn('Recomeçar', recomecar));
   }
+  function recomecar() { plano = null; erroPlano = null; ui.resultado = null; ui.avisoRascunho = ''; S = novoRascunho(); persistir(true); render(false); }
 
   /* --- passo 1 --- */
   function passo1() {
@@ -340,6 +411,8 @@
     S.sel.forEach(function (t) {
       if (S.alvos[t] === undefined) S.alvos[t] = alvosSalvos[t] !== undefined && alvosSalvos[t] !== null ? String(alvosSalvos[t]).replace('.', ',') : '';
       if (S.tetos[t] === undefined) S.tetos[t] = '';
+      var pAtual = S.precos[t];
+      if (pAtual && !pAtual.manual && pAtual.fonte !== 'brapi') delete S.precos[t];   // referência pode ter chegado depois: recalcula
       if (!S.precos[t]) { var r = refPreco(t); S.precos[t] = { txt: r.precoCent > 0 ? reaisTxt(r.precoCent) : '', manual: false, estado: r.estado || 'indisponivel', fonte: r.fonte || null, em: r.em || null }; }
     });
     var cfgv = cfg();
@@ -369,7 +442,7 @@
         h('th', { scope: 'row', class: 'l' }, t, h('span', { class: 'pb-note' }, ' lote ' + loteDe(t))),
         h('td', null, campo({ id: idP, rotulo: 'Preço de ' + t + ' (R$)', oculto: true, valor: rowPrecos.txt, erroId: 'err-preco-' + t,
           onInput: function (v) {
-            var p = S.precos[t]; p.txt = v; p.manual = true; p.estado = 'manual'; p.fonte = 'manual'; p.em = null; plano = null;
+            var p = S.precos[t]; p.txt = v; p.manual = true; p.estado = 'manual'; p.fonte = 'manual'; p.em = null; plano = null; S.confirma = false;
             chipTd.replaceChild(chip(p), chipTd.firstChild); persistir(); rev();
           } }), ' ', chipTd),
         h('td', null, campo({ id: 'inva-alvo-' + t, rotulo: 'Alvo de ' + t + ' (% da carteira)', oculto: true, valor: S.alvos[t], erroId: 'err-alvo-' + t,
@@ -506,6 +579,7 @@
           else if (isNaN(n)) msg = 'Informe um número inteiro maior ou igual a zero.';
           else if (n % lote !== 0) msg = 'Use múltiplos do lote (' + lote + ').';
           errosQtd[l.ticker] = msg; setErro(errId, idQ, msg);
+          S.confirma = false;
           if (!msg) { S.qtdEdit[l.ticker] = n; S.exec = {}; }
           atualizar();
         } });
@@ -557,6 +631,7 @@
     }
     div.appendChild(h('p', null, h('strong', null, 'Proposta — nada foi comprado.')));
     div.appendChild(h('p', { class: 'pb-note' }, 'Quantidades são estimativas calculadas com preços de referência e custos da configuração; edite as quantidades (múltiplos do lote) se quiser. Os totais recalculam na hora.'));
+    div.appendChild(h('p', { class: 'pb-note', id: 'inva-basedepois' }, 'Atual % = parte de cada ativo nas posições atuais (selecionadas + outras). Depois % e Alvo % usam a mesma base: % do total (posições selecionadas + outras + aporte desta rodada), isto é, o valor atual das posições mais o disponível (orçamento menos reserva), mesmo que parte dele não seja gasta.'));
     div.appendChild(totEl);
     div.appendChild(avisoEl);
     (plano.avisos || []).forEach(function (a) { div.appendChild(aviso(a, 'warn')); });
@@ -566,11 +641,11 @@
         h('th', { scope: 'col', class: 'l' }, 'Ativo'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Classe'), h('th', { scope: 'col' }, 'Preço'),
         h('th', { scope: 'col' }, 'Atual %'), h('th', { scope: 'col' }, 'Alvo %'), h('th', { scope: 'col' }, 'Gap'), h('th', { scope: 'col', class: 'pb-hide-sm' }, 'Score (fator)'),
         h('th', { scope: 'col' }, 'Valor proposto'), h('th', { scope: 'col' }, 'Qtd'), h('th', { scope: 'col' }, 'Custos'), h('th', { scope: 'col' }, 'Total'),
-        h('th', { scope: 'col' }, 'Depois %'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Motivo'))),
+        h('th', { scope: 'col', title: '% do total (posições selecionadas + outras + aporte desta rodada)' }, 'Depois %'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Motivo'))),
       tbody)));
     div.appendChild(graf); div.appendChild(legenda);
     div.appendChild(h('p', { class: 'pb-note' }, 'Quantidades inteiras; a B3 não negocia fração de ação. Resultados passados não garantem futuros.'));
-    var navEl = nav(function () { irPara(3); }, function () { S.exec = S.exec || {}; ui.erros5 = []; ui.resultado = null; irPara(5); }, { rotulo: 'Revisar e registrar' });
+    var navEl = nav(function () { irPara(3); }, function () { S.exec = S.exec || {}; S.confirma = false; ui.erros5 = []; ui.resultado = null; irPara(5); }, { rotulo: 'Revisar e registrar' });
     btnAv = navEl.children[1];
     div.appendChild(navEl);
     setTimeout(function () { atualizar(); }, 0);
@@ -594,7 +669,8 @@
       if (!S.exec[t]) S.exec[t] = { marcado: true, preco: reaisTxt(r.l.precoCent), qtd: String(r.qtd) };
     });
     var tbody = h('tbody'), cel = {}, errGeral = h('div', { 'aria-live': 'polite', id: 'inva-err5' }), totalEl = h('p', { 'aria-live': 'polite', class: 'pb-note' });
-    var btnReg = null;
+    var btnReg = null, cbGeral = null;
+    function mudouExec() { S.confirma = false; if (cbGeral) cbGeral.checked = false; }   // a proposta/execução mudou: confirmar de novo
     function calcLinha(t) {
       var e = S.exec[t], p = CALC.toCents(e.preco), q = /^\d+$/.test(String(e.qtd).trim()) ? parseInt(e.qtd, 10) : NaN, erros = [];
       if (p === null || p <= 0) erros.push('preço inválido'); if (isNaN(q) || q <= 0) erros.push('quantidade inválida');
@@ -619,12 +695,12 @@
       var t = r.l.ticker, e = S.exec[t], idC = 'inva-exec-' + t;
       cel[t] = { taxas: h('td'), total: h('td') };
       tbody.appendChild(h('tr', null,
-        h('td', null, h('input', { type: 'checkbox', id: idC, checked: !!e.marcado, onchange: function (ev) { e.marcado = ev.target.checked; atualizar(); } }), ' ', h('label', { for: idC }, h('strong', null, t), h('span', { class: 'inv-sr' }, ' executada'))),
-        h('td', null, campo({ id: 'inva-ep-' + t, rotulo: 'Preço executado de ' + t + ' (R$)', oculto: true, valor: e.preco, erroId: 'err-ep-' + t, onInput: function (v) { e.preco = v; atualizar(); } })),
-        h('td', null, campo({ id: 'inva-eq-' + t, rotulo: 'Quantidade executada de ' + t, oculto: true, valor: e.qtd, inputmode: 'numeric', erroId: 'err-eq-' + t, onInput: function (v) { e.qtd = v; atualizar(); } })),
+        h('td', null, h('input', { type: 'checkbox', id: idC, checked: !!e.marcado, onchange: function (ev) { e.marcado = ev.target.checked; mudouExec(); atualizar(); } }), ' ', h('label', { for: idC }, h('strong', null, t), h('span', { class: 'inv-sr' }, ' executada'))),
+        h('td', null, campo({ id: 'inva-ep-' + t, rotulo: 'Preço executado de ' + t + ' (R$)', oculto: true, valor: e.preco, erroId: 'err-ep-' + t, onInput: function (v) { e.preco = v; mudouExec(); atualizar(); } })),
+        h('td', null, campo({ id: 'inva-eq-' + t, rotulo: 'Quantidade executada de ' + t, oculto: true, valor: e.qtd, inputmode: 'numeric', erroId: 'err-eq-' + t, onInput: function (v) { e.qtd = v; mudouExec(); atualizar(); } })),
         cel[t].taxas, cel[t].total));
     });
-    var cbGeral = h('input', { type: 'checkbox', id: 'inva-confirma', checked: !!S.confirma, onchange: function (ev) { S.confirma = ev.target.checked; atualizar(); } });
+    cbGeral = h('input', { type: 'checkbox', id: 'inva-confirma', checked: !!S.confirma, onchange: function (ev) { S.confirma = ev.target.checked; atualizar(); } });
     div.appendChild(h('p', null, h('strong', null, 'Registrar só o que foi executado na corretora.')));
     div.appendChild(h('p', { class: 'pb-note' }, 'Para cada linha, confirme o preço e a quantidade realmente executados. Desmarque o que não foi executado. Nada é registrado até você confirmar e clicar no botão.'));
     if (!linhas.length) {
@@ -690,7 +766,7 @@
     var r = ui.resultado;
     div.appendChild(aviso(r.n + ' compra(s) registrada(s): ' + r.tickers.join(', ') + '. Total ' + brl(r.total) + '. Caixa registrado agora: ' + brl(r.caixaDepois) + '.', 'info'));
     div.appendChild(h('p', { class: 'pb-note' }, 'O rascunho do assistente foi limpo. Confira as transações na tabela da aba Corretora.'));
-    div.appendChild(h('div', { class: 'inv-actions' }, btn('Novo aporte', function () { ui.resultado = null; render(false); })));
+    div.appendChild(h('div', { class: 'inv-actions' }, btn('Novo aporte', function () { ui.resultado = null; render(false); }), btn('Recomeçar', recomecar)));
     return div;
   }
 
