@@ -171,13 +171,13 @@
       'Cada bolinha é uma ação: no eixo horizontal, a variação no estresse; no vertical, a margem de segurança (limitada a −100%). Acima da linha tracejada “valor justo” o preço está abaixo do valor calculado. A cor é o sinal da legenda. Passe o mouse para ver preço, valor justo e score; clique para abrir o ativo.');
     s(C_VAL, 'valor', '#ms-bars', 'Margem de segurança por ação',
       function () {
-        return 'Barras ordenadas da maior para a menor margem, limitadas a −100%. Verde indica margem positiva. Valor justo = P/VP justo (ROE, Ke ' + ke() + ' e g ' + g() +
+        return 'Barras ordenadas da maior para a menor margem. Verde indica margem positiva. −100% significa ROE normalizado menor ou igual a g: o modelo de valor justo não se aplica (aparece "n/a"). Valor justo = P/VP justo (ROE, Ke ' + ke() + ' e g ' + g() +
           ') × valor patrimonial por ação. À direita, a margem em %. O ROE normalizado aparece ao passar o mouse.';
       });
     s(C_VAL, 'valor', '#scatter-fiis', 'FIIs: P/VP × dividend yield',
       function () {
         var x = par();
-        return 'Cada ponto é um FII: P/VP na horizontal e DY de 12 meses na vertical. A linha tracejada horizontal é o CDI líquido de IR' + (x ? ' (' + pn(x.cdi_liq, 2) + '%)' : '') +
+        return 'Cada ponto é um FII: P/VP na horizontal e DY de 12 meses na vertical. A linha tracejada horizontal é o DI jan/28 líquido de IR (15%), usado pelo score como referência de renda fixa' + (x ? ' (' + pn(x.cdi_liq, 2) + '%)' : '') +
           '; a vertical pontilhada marca P/VP = 1 quando esse valor cabe no gráfico. Círculo vazado: o FFO cobre menos de 85% da distribuição, ou seja, o rendimento pago pode não se sustentar.';
       });
 
@@ -216,7 +216,7 @@
       function () {
         var x = par();
         return 'Custo de capital (Ke)' + (x ? ' de ' + pn(x.ke, 1) + '%' : '') + ' e crescimento perpétuo (g)' + (x ? ' de ' + pn(x.g, 1) + '%' : '') +
-          ' entram no valor justo das ações. O CDI líquido' + (x ? ' (' + pn(x.cdi_liq, 2) + '%)' : '') + ' é a referência de renda fixa para os FIIs, que são isentos de IR. A data da versão diz quando o score foi calculado.';
+          ' entram no valor justo das ações. O DI jan/28 líquido de IR (15%)' + (x ? ' (' + pn(x.cdi_liq, 2) + '%)' : '') + ' é a referência de renda fixa para os FIIs, que são isentos de IR. A data da versão diz quando o score foi calculado.';
       });
     s(C_MET, 'metodo', 'card:Como ler o score', 'Como ler o score',
       'P1 mede desconto contra o valor justo e queda ajustada pela qualidade. P2 mede alavancagem, liquidez e lucro sobre preço. P3 mede ROE, eficiência, crescimento e consistência. P4 mede dividend yield e se ele é coberto pelo lucro. Dado ausente não vale zero: o peso é redistribuído no pilar.');
@@ -227,7 +227,7 @@
     s(C_MET, 'metodo', 'card:Como ler o score', 'Pilares nas ações: P3 e P4',
       'P3 (até 250) soma ROE normalizado (até 100), ROIC (até 75; nos bancos, inadimplência de 90 dias), crescimento (até 50) e consistência do lucro (até 25); estatais perdem 15 pontos pelo risco de governança. P4 (até 200) soma dividend yield (até 80), cobertura do dividendo pelo lucro, via payout (até 80), e consistência (até 40).');
     s(C_MET, 'metodo', 'card:Como ler o score', 'Pilares nos FIIs',
-      'Nos FIIs, P1 usa o P/VP (com ajuste pela cobertura do FFO), a queda relativa à mediana dos FIIs e a tendência do FFO. P2 usa passivo ÷ ativo, volume negociado e FFO yield contra o CDI líquido. P3 olha vacância e número de imóveis (tijolo) ou qualidade e perfil do crédito (papel), além do porte. P4 usa DY, cobertura da distribuição pelo FFO e dependência de venda de ativos.');
+      'Nos FIIs, P1 usa o P/VP (com ajuste pela cobertura do FFO), a queda relativa à mediana dos FIIs e a tendência do FFO. P2 usa passivo ÷ ativo, volume negociado e FFO yield contra o DI jan/28 líquido de IR. P3 olha vacância e número de imóveis (tijolo) ou qualidade e perfil do crédito (papel), além do porte. P4 usa DY, cobertura da distribuição pelo FFO e dependência de venda de ativos.');
     s(C_MET, 'metodo', 'card:Valor justo', 'Valor justo e margem de segurança',
       function () {
         return 'P/VP justo = (ROE − g) ÷ (Ke − g), com Ke ' + ke() + ' e g ' + g() + '. O ROE usado é o normalizado (média do ROE de 12 meses e do último trimestre anualizado); em petróleo e mineração vale só o de 12 meses. ' +
