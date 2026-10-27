@@ -183,7 +183,7 @@
 
     /* ---- preços ---- */
     s(C_PRE, 'precos', '#multiples', 'Pequenos múltiplos em base 100',
-      'Um quadro por ativo, na ordem do ranking, todos na mesma escala vertical. O preço é convertido para base 100 no fechamento de 1 mês antes da data de referência (a data aparece no texto da aba). A linha cinza é o Ibovespa; o tracejado vertical marca a data de referência. O título de cada quadro traz a posição, o ticker e a variação em 1 mês. Passe o mouse para ver data, fechamento e Ibovespa; clique para abrir o ativo.');
+      'Um quadro por ativo, na ordem do ranking, todos na mesma escala vertical. O preço é convertido para base 100 no fechamento de 1 mês antes da data de referência (a data aparece no texto da aba). A linha cinza é o Ibovespa; o tracejado vertical marca o dia do estresse. O título de cada quadro traz a posição, o ticker e a variação em 1 mês. Passe o mouse para ver data, fechamento e Ibovespa; clique para abrir o ativo.');
 
     /* ---- ativo ---- */
     s(C_ATI, 'ativo', '#ativo .pb-controls', 'Escolher o ativo',
