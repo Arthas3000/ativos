@@ -273,6 +273,180 @@ def cmd_catalogo():
     print(f"catalogo.json: {len(cat)} ativos fora do ranking ({n} com leitura preliminar, {len(cat) - n} so cadastro)")
 
 
+# ---------------------------------------------------------------- ativos adicionados pelo usuario (so o ticker)
+EXTRAS_MAX = 30
+TICKER_RE = re.compile(r"[A-Z][A-Z0-9]{3}\d{1,2}B?")
+
+
+def extrair_tickers(texto):
+    """Tickers validos num texto livre (ex.: titulo de issue 'Adicionar ativo: PRIO3, TAEE11'), sem repeticao."""
+    achados = re.findall(r"(?<![A-Z0-9])" + TICKER_RE.pattern + r"(?![A-Z0-9])", (texto or "").upper())
+    return list(dict.fromkeys(achados))
+
+
+def cmd_adicionar():
+    """adicionar T1 T2 ... | adicionar --remover T1: atualiza 'extras' de config.json (limite EXTRAS_MAX)."""
+    args = [a for a in sys.argv[2:] if a != "--remover"]
+    remover = "--remover" in sys.argv[2:]
+    novos = extrair_tickers(" ".join(args))
+    if not novos:
+        raise SystemExit("nenhum ticker valido informado")
+    c = cfg()
+    ranking = {r["ticker"] for r in read_csv(ENTRADA)}
+    extras = list(c.get("extras", []))
+    if remover:
+        extras = [t for t in extras if t not in novos]
+    else:
+        for t in novos:
+            if t in ranking:
+                print(f"{t}: ja esta no ranking; ignorado")
+            elif t not in extras:
+                if len(extras) >= EXTRAS_MAX:
+                    raise SystemExit(f"limite de {EXTRAS_MAX} ativos adicionados atingido; remova algum antes")
+                extras.append(t)
+                print(f"{t}: adicionado")
+            else:
+                print(f"{t}: ja estava na lista")
+    c["extras"] = extras
+    CFG_PATH.write_text(json.dumps(c, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _ate(d, c, dia):
+    """Ultimo fechamento em data <= dia (ou None)."""
+    v = None
+    for x, y in zip(d, c):
+        if x > dia:
+            break
+        v = y
+    return v
+
+
+def metricas_serie(d, c, div, cfg_, dias_vol=252):
+    """Indicadores so da serie de precos (fechamento sem dividendos): variacoes, volatilidade anual, queda maxima, DY 12m."""
+    ref = dt.date.fromisoformat(cfg_["data_ref"])
+    ult = _ate(d, c, ref.isoformat())
+    if ult is None:
+        return None
+    var = lambda dias: (lambda p: None if not p else round((ult / p - 1) * 100, 2))(_ate(d, c, (ref - dt.timedelta(days=dias)).isoformat()))
+    rets = [c[i] / c[i - 1] - 1 for i in range(1, len(c)) if c[i - 1] > 0 and d[i] <= ref.isoformat()][-dias_vol:]
+    vol = None
+    if len(rets) >= 20:
+        m = sum(rets) / len(rets)
+        vol = round((sum((x - m) ** 2 for x in rets) / (len(rets) - 1)) ** 0.5 * 252 ** 0.5 * 100, 2)
+    pico, mdd = 0.0, 0.0
+    for dia, p in zip(d, c):
+        if dia > ref.isoformat():
+            break
+        pico = max(pico, p)
+        if pico > 0:
+            mdd = min(mdd, p / pico - 1)
+    ini12 = (ref - dt.timedelta(days=365)).isoformat()
+    div12 = sum(v for dia, v in div if ini12 < dia <= ref.isoformat())
+    est, pre = _ate(d, c, cfg_["data_estresse"]), _ate(d, c, cfg_["data_pre_estresse"])
+    return {"preco": round(ult, 2), "data_preco": max(x for x in d if x <= ref.isoformat()),
+            "var_1m": var(30), "var_3m": var(91), "var_12m": var(365), "vol_anual": vol, "queda_max": round(mdd * 100, 2),
+            "dy12_calc": round(div12 / ult * 100, 2) if ult > 0 else None,
+            "var_estresse": round((est / pre - 1) * 100, 2) if est and pre else None}
+
+
+def amostra_semanal(d, c, ate):
+    """Um fechamento por semana (ultimo da semana) para o grafico: lista [data, preco]."""
+    out, ult = [], None
+    for dia, p in zip(d, c):
+        if dia > ate:
+            break
+        sem = dt.date.fromisoformat(dia).isocalendar()[:2]
+        if ult is not None and sem != ult[0]:
+            out.append(ult[1])
+        ult = (sem, [dia, round(p, 2)])
+    if ult:
+        out.append(ult[1])
+    return out
+
+
+ENTRADA_COLS = ["pl", "ll12", "ll3", "pe", "pvp", "dy", "roic", "lc", "dl_ebitda", "dl_pl", "cresc", "cet1", "cobertura", "npl90",
+                "div12", "ffo12", "ffo3", "rend12", "venda_ativos12", "ativos", "plf", "cotas", "vol_mi", "vacancia", "n_imoveis",
+                "credito", "perfil", "ll12_rec", "dy_rec", "preco", "var_stress", "fii_mediana", "tipo", "estatal", "classe"]
+
+
+def pontuar_extra(classe, fund, var_stress, fii_mediana):
+    """Roda o MESMO modelo do ranking (score.stock / score.fii) com os dados automaticos; o que falta fica vazio e o peso
+    e redistribuido dentro do pilar. Devolve (resultado | None, motivo | None)."""
+    fii = classe == "FII"
+    fund = {**{k: None for k in LABELS}, **fund}      # campo que o Fundamentus nao trouxe = vazio
+    row = {k: "" for k in ENTRADA_COLS}
+    row.update(classe="FII" if fii else "ACAO", estatal="0", tipo=("tijolo" if fund.get("vacancia") is not None or fund.get("n_imoveis") is not None else "papel") if fii else "geral")
+    for k, v in auto_values({"classe": row["classe"], "tipo": row["tipo"]}, fund).items():
+        if v is not None:
+            row[k] = fmt(v)
+    if var_stress is None:
+        return None, "sem preços na janela do estresse"
+    row["var_stress"] = fmt(var_stress)
+    row["fii_mediana"] = fmt(fii_mediana) if fii_mediana is not None else ""
+    try:
+        if not fii:
+            if num(row["pl"]) is None or num(row["pl"]) <= 0 or num(row["ll12"]) is None or num(row["ll3"]) is None or num(row["pvp"]) is None:
+                return None, "faltam patrimônio, lucros ou P/VP no Fundamentus (ou patrimônio negativo)"
+        elif fii_mediana is None or any(num(row[k]) in (None, 0) for k in ("preco", "pvp", "div12", "ffo12", "ffo3", "rend12", "ativos", "plf", "cotas")):
+            return None, "faltam dados do FII no Fundamentus (FFO, rendimento, patrimônio ou cotas)"
+        pillars, extra = score.fii(row) if fii else score.stock(row)
+    except (ZeroDivisionError, TypeError, ValueError, KeyError) as e:
+        return None, f"dados insuficientes para o modelo ({type(e).__name__})"
+    exatos = [v for v, _ in pillars]
+    pts = [None if v is None else round(v, 1) for v in exatos]
+    cob = round(sum(a for _, a in pillars) / 1000, 3)
+    if cob < 0.75:
+        return None, f"cobertura de dados de {cob * 100:.0f}% (mínimo 75%)"
+    total = round(sum(v for v in exatos if v is not None), 1)
+    ms = extra.get("ms")
+    return {"total": total, "p1": pts[0], "p2": pts[1], "p3": pts[2], "p4": pts[3], "cobertura": cob,
+            "status": "definitivo" if cob >= 0.90 else "provisorio", "tipo_assumido": row["tipo"],
+            "ms": None if ms is None else round(ms * 100, 1), "pvp_justo": round(extra["pvp_just"], 2) if "pvp_just" in extra else None}, None
+
+
+def construir_ficha(t, nome, serie, fund, cfg_, fii_mediana):
+    m = metricas_serie(serie["d"], serie["c"], serie.get("div") or [], cfg_) if serie else None
+    classe = "FII" if fund and (fund.get("ffo12") is not None or fund.get("relatorio")) else "Ação"
+    ficha = {"ticker": t, "nome": nome or t, "classe": classe, "data_ref": cfg_["data_ref"], "metricas": m,
+             "fundamentos": None, "score": None, "motivo": None, "serie": amostra_semanal(serie["d"], serie["c"], cfg_["data_ref"]) if serie else []}
+    if fund:
+        ficha["fundamentos"] = {k: fund.get(k) for k in ("pl", "pvp", "dy", "roic", "lc", "cresc", "margem_liq", "ev_ebitda", "balanco", "div12", "vacancia", "n_imoveis")}
+    if not m:
+        ficha["motivo"] = "sem histórico de preços (Yahoo)"
+    elif not fund:
+        ficha["motivo"] = "sem dados do Fundamentus"
+    else:
+        if fund.get("preco") and m["preco"] and abs(fund["preco"] / m["preco"] - 1) > 0.15:
+            ficha["aviso_preco"] = f"cotação do Fundamentus ({fund['preco']}) difere do Yahoo ({m['preco']}) em mais de 15%"
+        ficha["score"], ficha["motivo"] = pontuar_extra(classe, fund, m["var_estresse"], fii_mediana)
+    return ficha
+
+
+def cmd_extras():
+    """dados/extras.json: ficha automatica de cada ativo em config.json 'extras' (preco, indicadores, nota parcial, serie semanal)."""
+    c = cfg()
+    OUT.mkdir(exist_ok=True)
+    longas = json.loads((LONGOS / "serie_longa.json").read_text(encoding="utf-8")).get("ativos", {}) if (LONGOS / "serie_longa.json").exists() else {}
+    ent = read_csv(ENTRADA)
+    med = next((num(r["fii_mediana"]) for r in ent if r["classe"] == "FII" and r.get("fii_mediana")), None)
+    fichas, falhas = [], {}
+    for t in c.get("extras", []):
+        try:
+            fund = parse(cells(t))
+            if fund.get("preco") is None and fund.get("pvp") is None:
+                fund = None
+        except Exception as e:  # noqa: BLE001 - rede/formato: o ativo fica sem fundamentos, nunca derruba o pipeline
+            fund, falhas[t] = None, f"Fundamentus: {e}"
+        s = longas.get(t)
+        fichas.append(construir_ficha(t, (s or {}).get("nome"), s, fund, c, med))
+        print(f"{t:8s} {'nota ' + str(fichas[-1]['score']['total']) if fichas[-1]['score'] else 'sem nota: ' + str(fichas[-1]['motivo'])}")
+        time.sleep(0.5)
+    saida = {"gerado_em": dt.datetime.now(BRT).isoformat(timespec="seconds"), "data_ref": c["data_ref"], "fichas": fichas, "falhas": falhas,
+             "aviso": "Nota automática parcial: mesmo modelo do ranking, só com dados públicos automáticos (Yahoo e Fundamentus), sem ajustes manuais. Não é recomendação."}
+    (OUT / "extras.json").write_text(json.dumps(saida, ensure_ascii=False), encoding="utf-8")
+    print(f"extras.json: {len(fichas)} ativos")
+
+
 def cmd_build():
     c, ent, nts = cfg(), {r["ticker"]: r for r in read_csv(ENTRADA)}, notas()
     precos = json.loads((SCORE / "precos_yahoo_3m.json").read_text(encoding="utf-8"))
@@ -641,6 +815,51 @@ def teste_catalogo(ent):
         print(f"ok: catalogo com {len(cat)} ativos fora do ranking")
 
 
+def teste_extras(ent):
+    assert extrair_tickers("Adicionar ativo: prio3, TAEE11 e BBFI11B; xx PETR4 petr4 AB12") == ["PRIO3", "TAEE11", "BBFI11B", "PETR4"]
+    assert extrair_tickers("ABCDEF3 B3SA3") == ["B3SA3"] and extrair_tickers(None) == []
+    # metricas da serie, conferidas contra aritmetica direta
+    ref = dt.date(2026, 10, 26)
+    dias = [(ref - dt.timedelta(days=k)).isoformat() for k in range(500, -1, -1)]
+    c = [10 + 0.01 * i for i in range(len(dias))]
+    c[-3] = c[-4] * 0.5                       # queda de 50% no dia 24/10 (so para exercitar o drawdown)
+    cfg_ = {"data_ref": ref.isoformat(), "data_estresse": ref.isoformat(), "data_pre_estresse": (ref - dt.timedelta(days=3)).isoformat()}
+    div = [((ref - dt.timedelta(days=100)).isoformat(), 0.5), ((ref - dt.timedelta(days=400)).isoformat(), 9.0)]
+    m = metricas_serie(dias, c, div, cfg_)
+    i = {d: k for k, d in enumerate(dias)}
+    ult = c[-1]
+    assert m["preco"] == round(ult, 2) and m["data_preco"] == ref.isoformat()
+    assert abs(m["var_12m"] - round((ult / c[i[(ref - dt.timedelta(days=365)).isoformat()]] - 1) * 100, 2)) < 1e-9
+    assert abs(m["var_1m"] - round((ult / c[i[(ref - dt.timedelta(days=30)).isoformat()]] - 1) * 100, 2)) < 1e-9
+    assert abs(m["dy12_calc"] - round(0.5 / ult * 100, 2)) < 1e-9, "so dividendos dos ultimos 12 meses"
+    assert abs(m["var_estresse"] - round((c[-1] / c[-4] - 1) * 100, 2)) < 1e-9
+    pico = max(c[:-2]); assert abs(m["queda_max"] - round((c[-3] / pico - 1) * 100, 2)) < 1e-9 and m["queda_max"] < -45
+    assert m["vol_anual"] > 0 and metricas_serie(dias[:5], c[:5], [], cfg_)["vol_anual"] is None
+    assert len(amostra_semanal(dias, c, cfg_["data_ref"])) < 80 and amostra_semanal(dias, c, cfg_["data_ref"])[-1][0] == ref.isoformat()
+    # o caminho automatico reproduz a nota do ranking quando as entradas sao as mesmas (acao e FII)
+    base = {x["ticker"]: x for x in score.run()}
+    geral = next(r for r in ent if r["classe"] == "ACAO" and r["tipo"] == "geral" and not r["ll12_rec"] and not r["dy_rec"] and r["dl_ebitda"])
+    ebitda = 1e9
+    f = {k: num(geral[k]) for k in ("pl", "ll12", "ll3", "pvp", "dy", "roic", "lc", "cresc")}
+    f.update(preco=num(geral["preco"]), pe=num(geral["pe"]), dl=num(geral["dl_ebitda"]) * ebitda, ev=ebitda * 5, ev_ebitda=5)
+    r, motivo = pontuar_extra("Ação", f, num(geral["var_stress"]), None)
+    assert motivo is None and abs(r["total"] - base[geral["ticker"]]["total"]) < 0.06, (geral["ticker"], r, base[geral["ticker"]]["total"])
+    tij = next(r for r in ent if r["classe"] == "FII" and r["tipo"] == "tijolo")
+    f = {k: num(tij[k]) for k in ("preco", "pvp", "div12", "ffo12", "ffo3", "rend12", "venda_ativos12", "ativos", "plf", "cotas", "vacancia", "n_imoveis")}
+    f.update(vol=num(tij["vol_mi"]) * 1e6, relatorio="x")
+    r, motivo = pontuar_extra("FII", f, num(tij["var_stress"]), num(tij["fii_mediana"]))
+    assert motivo is None and abs(r["total"] - base[tij["ticker"]]["total"]) < 0.06, (tij["ticker"], r, base[tij["ticker"]]["total"])
+    # dado faltando nunca vira nota inventada
+    assert pontuar_extra("Ação", {"pl": None}, -5.0, None)[0] is None and pontuar_extra("Ação", f, None, None)[0] is None
+    assert pontuar_extra("Ação", {**{k: None for k in LABELS}, "pl": -1.0, "ll12": 1, "ll3": 1, "pvp": 1}, -5.0, None)[0] is None
+    fch = construir_ficha("ZZZZ3", None, None, None, cfg_, None)
+    assert fch["score"] is None and fch["motivo"] and fch["serie"] == []
+    if (OUT / "extras.json").exists():
+        ex = json.loads((OUT / "extras.json").read_text(encoding="utf-8"))
+        assert len({x["ticker"] for x in ex["fichas"]}) == len(ex["fichas"]) and not ({x["ticker"] for x in ex["fichas"]} & {r["ticker"] for r in ent})
+    print("ok: ativos adicionados (metricas da serie, mesma nota do ranking para as mesmas entradas, faltas sem nota)")
+
+
 def cmd_teste():
     ent, nts = read_csv(ENTRADA), notas()
     ativos = json.loads((OUT / "ativos.json").read_text(encoding="utf-8"))
@@ -653,6 +872,7 @@ def cmd_teste():
     assert pick(["P/L", "6,91", "Lucro Líquido", "1", "Lucro Líquido", "2"], "Lucro Líquido", 1) == "2"
     print(f"ok: {len(ativos)} ativos consistentes")
     teste_catalogo(ent)
+    teste_extras(ent)
     teste_precos_e_score(ent, ativos)
     teste_historico()
 
@@ -660,5 +880,5 @@ def cmd_teste():
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     {"precos": cmd_precos, "build": cmd_build, "snapshot": cmd_snapshot, "teste": cmd_teste,
-     "nova-versao": cmd_nova_versao, "catalogo": cmd_catalogo, "auto-datas": cmd_auto_datas, "site": cmd_site, "historico": cmd_historico,
+     "nova-versao": cmd_nova_versao, "catalogo": cmd_catalogo, "adicionar": cmd_adicionar, "extras": cmd_extras, "auto-datas": cmd_auto_datas, "site": cmd_site, "historico": cmd_historico,
      "fundamentus": lambda: cmd_fundamentus(apply="--nao-aplicar" not in sys.argv)}.get(cmd, lambda: print(__doc__))()
