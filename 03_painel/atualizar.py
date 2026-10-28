@@ -67,22 +67,36 @@ def janela_precos(c, hoje):
     return min(dt.date.fromisoformat(c["data_pre_estresse"]) - dt.timedelta(days=45), hoje - dt.timedelta(days=100))
 
 
+def rows_de_chart(js):
+    """Resposta da chart API do Yahoo -> (longName, [{'d','o','h','l','c','v'}]) so com pregoes de fechamento valido (funcao pura)."""
+    r = js["chart"]["result"][0]
+    q = r["indicators"]["quote"][0]
+    rows = [{"d": dt.datetime.fromtimestamp(ts, BRT).date().isoformat(), "o": q["open"][i], "h": q["high"][i],
+             "l": q["low"][i], "c": q["close"][i], "v": q["volume"][i]}
+            for i, ts in enumerate(r.get("timestamp", [])) if q["close"][i] is not None]
+    return r["meta"].get("longName"), rows
+
+
+def baixar_rows(t, p1, p2):
+    sym = t if t.startswith("^") else t + ".SA"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?period1={p1}&period2={p2}&interval=1d"
+    nome, rows = rows_de_chart(json.load(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30)))
+    return {"meta": {"longName": nome}, "rows": rows}
+
+
+def janela_unix():
+    agora = dt.datetime.now(BRT)
+    ini = janela_precos(cfg(), agora.date())
+    return int(dt.datetime.combine(ini, dt.time(0, 0), tzinfo=BRT).timestamp()), int(agora.timestamp())
+
+
 def cmd_precos():
     tickers = [r["ticker"] for r in read_csv(ENTRADA)] + ["^BVSP"]
     out = {}
-    agora = dt.datetime.now(BRT)
-    ini = janela_precos(cfg(), agora.date())
-    p1 = int(dt.datetime.combine(ini, dt.time(0, 0), tzinfo=BRT).timestamp())
-    p2 = int(agora.timestamp())
+    p1, p2 = janela_unix()
     for t in tickers:
-        sym = t if t.startswith("^") else t + ".SA"
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?period1={p1}&period2={p2}&interval=1d"
-        r = json.load(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=30))["chart"]["result"][0]
-        q = r["indicators"]["quote"][0]
-        rows = [{"d": dt.datetime.fromtimestamp(ts, BRT).date().isoformat(), "o": q["open"][i], "h": q["high"][i],
-                 "l": q["low"][i], "c": q["close"][i], "v": q["volume"][i]}
-                for i, ts in enumerate(r.get("timestamp", [])) if q["close"][i] is not None]
-        out[t] = {"meta": {"longName": r["meta"].get("longName")}, "rows": rows}
+        out[t] = baixar_rows(t, p1, p2)
+        rows = out[t]["rows"]
         print(f"{t:7s} {len(rows)} pregoes, ultimo {rows[-1]['d']} {rows[-1]['c']:.2f}")
     (SCORE / "precos_yahoo_3m.json").write_text(json.dumps(out), encoding="utf-8")
 
@@ -401,10 +415,49 @@ def pontuar_extra(classe, fund, var_stress, fii_mediana):
     ms = extra.get("ms")
     return {"total": total, "p1": pts[0], "p2": pts[1], "p3": pts[2], "p4": pts[3], "cobertura": cob,
             "status": "definitivo" if cob >= 0.90 else "provisorio", "tipo_assumido": row["tipo"],
-            "ms": None if ms is None else round(ms * 100, 1), "pvp_justo": round(extra["pvp_just"], 2) if "pvp_just" in extra else None}, None
+            "ms": None if ms is None else round(ms * 100, 1), "pvp_justo": round(extra["pvp_just"], 2) if "pvp_just" in extra else None,
+            "_row": row, "_extra": extra}, None
 
 
-def construir_ficha(t, nome, serie, fund, cfg_, fii_mediana):
+def precos_extra(t, rows, c):
+    """Mesmas linhas de precos.json (ticker, data, fechamento, base100) para um ativo adicionado."""
+    corte = min((dt.date.fromisoformat(c["data_ref"]) - dt.timedelta(days=92)).isoformat(),
+                (dt.date.fromisoformat(c["data_pre_estresse"]) - dt.timedelta(days=10)).isoformat())
+    b = on_or_before(rows, c["data_1m"])["c"]
+    return [{"ticker": t, "data": r["d"], "fechamento": round(r["c"], 2), "base100": round(r["c"] / b * 100, 2)}
+            for r in rows if corte <= r["d"] <= c["data_ref"]]
+
+
+def linha_ativo(t, nome, segmento, classe, res, fund, stats, metricas):
+    """Linha no MESMO formato de ativos.json (tabelas e graficos do app leem esse formato). O que a fonte nao entrega fica None;
+    nada e inventado. 'posicao' None = fora do ranking curado."""
+    row, ex = res["_row"], res["_extra"]
+    fii = classe == "FII"
+    out = {"ticker": t, "nome": nome or t, "classe": classe, "segmento": segmento or "—", "posicao": None, "score": res["total"],
+           "p1": res["p1"], "p2": res["p2"], "p3": res["p3"], "p4": res["p4"], "cobertura": round(res["cobertura"] * 100, 2),
+           "status": res["status"], "confianca": "Automática", "sinal": "adicionado",
+           "tese": "Nota automática calculada só com dados públicos, sem análise qualitativa.",
+           "risco": (f"Queda máxima de {abs(metricas['queda_max']):.1f}% em 5 anos".replace(".", ",") if metricas and metricas.get("queda_max") is not None else "Risco não calculado")
+                    + (f"; oscilação de {metricas['vol_anual']:.1f}% ao ano".replace(".", ",") if metricas and metricas.get("vol_anual") is not None else "") + " (histórico de preço).",
+           "nota": "Modelo do ranking com dados automáticos (Yahoo e Fundamentus); sem ajustes manuais. Tipo assumido: " + res["tipo_assumido"] + ".",
+           "pvp": num(row["pvp"]), "balanco": fund.get("balanco") or fund.get("relatorio"), **stats, "adicionado": True}
+    if fii:
+        out.update(dy=r2(ex.get("dy")), ffo_yield=r2(ex.get("ffoy")), cobertura_ffo=r2(ex.get("cov"), 100), passivo_ativo=r2(ex.get("lev")),
+                   venda_ativos_pct=r2(ex.get("va"), 100), vacancia=num(row["vacancia"]),
+                   patrimonio_bi=r2(num(row["plf"]) / 1e9) if num(row["plf"]) is not None else None,
+                   vp_cota=r2(num(row["plf"]) / num(row["cotas"])) if num(row["plf"]) is not None and num(row["cotas"]) else None)
+    else:
+        out.update(dy=num(row["dy"]), dy_recorrente=False, pl_ratio=num(row["pe"]), pl_recorrente=False,
+                   ev_ebitda=fund.get("ev_ebitda"), margem_liq=fund.get("margem_liq"),
+                   roe=r2(ex.get("roe12"), 100), roe_n=r2(ex.get("roen"), 100), ms=r2(ex.get("ms"), 100),
+                   valor_justo=r2(ex["pvp_just"] * num(row["preco"]) / num(row["pvp"])) if num(row["pvp"]) and num(row["preco"]) else None,
+                   earnings_yield=r2(ex.get("ey"), 100), payout=r2(ex.get("payout"), 100), alavancagem=num(row["dl_ebitda"]),
+                   alavancagem_tipo="DL/EBITDA", cet1=None, npl90=None, cobertura_pdd=None,
+                   patrimonio_bi=r2(num(row["pl"]) / 1e9) if num(row["pl"]) is not None else None)
+    return out
+
+
+def construir_ficha(t, nome, serie, fund, cfg_, fii_mediana, rows=None, segmento=None):
     m = metricas_serie(serie["d"], serie["c"], serie.get("div") or [], cfg_) if serie else None
     classe = "FII" if fund and (fund.get("ffo12") is not None or fund.get("relatorio")) else "Ação"
     ficha = {"ticker": t, "nome": nome or t, "classe": classe, "data_ref": cfg_["data_ref"], "metricas": m,
@@ -419,6 +472,15 @@ def construir_ficha(t, nome, serie, fund, cfg_, fii_mediana):
         if fund.get("preco") and m["preco"] and abs(fund["preco"] / m["preco"] - 1) > 0.15:
             ficha["aviso_preco"] = f"cotação do Fundamentus ({fund['preco']}) difere do Yahoo ({m['preco']}) em mais de 15%"
         ficha["score"], ficha["motivo"] = pontuar_extra(classe, fund, m["var_estresse"], fii_mediana)
+    ficha["ativo"], ficha["precos"] = None, []
+    if ficha["score"] and rows:
+        try:
+            ficha["ativo"] = linha_ativo(t, nome, segmento, classe, ficha["score"], fund, price_stats(rows, cfg_), m)
+            ficha["precos"] = precos_extra(t, rows, cfg_)
+        except (KeyError, ValueError, ZeroDivisionError, TypeError, AttributeError):  # janela de 3 meses curta demais (ativo novo): fica so na aba do ativo
+            ficha["ativo"], ficha["precos"] = None, []
+    if ficha["score"]:
+        ficha["score"] = {k: v for k, v in ficha["score"].items() if not k.startswith("_")}
     return ficha
 
 
@@ -429,6 +491,8 @@ def cmd_extras():
     longas = json.loads((LONGOS / "serie_longa.json").read_text(encoding="utf-8")).get("ativos", {}) if (LONGOS / "serie_longa.json").exists() else {}
     ent = read_csv(ENTRADA)
     med = next((num(r["fii_mediana"]) for r in ent if r["classe"] == "FII" and r.get("fii_mediana")), None)
+    cat = {x["ticker"]: x for x in json.loads((OUT / "catalogo.json").read_text(encoding="utf-8"))} if (OUT / "catalogo.json").exists() else {}
+    p1, p2 = janela_unix()
     fichas, falhas = [], {}
     for t in c.get("extras", []):
         try:
@@ -437,8 +501,12 @@ def cmd_extras():
                 fund = None
         except Exception as e:  # noqa: BLE001 - rede/formato: o ativo fica sem fundamentos, nunca derruba o pipeline
             fund, falhas[t] = None, f"Fundamentus: {e}"
+        try:
+            rows = baixar_rows(t, p1, p2)["rows"]
+        except Exception as e:  # noqa: BLE001
+            rows, falhas[t] = None, (falhas.get(t, "") + f" Yahoo (3 meses): {e}").strip()
         s = longas.get(t)
-        fichas.append(construir_ficha(t, (s or {}).get("nome"), s, fund, c, med))
+        fichas.append(construir_ficha(t, (s or {}).get("nome"), s, fund, c, med, rows, (cat.get(t) or {}).get("segmento")))
         print(f"{t:8s} {'nota ' + str(fichas[-1]['score']['total']) if fichas[-1]['score'] else 'sem nota: ' + str(fichas[-1]['motivo'])}")
         time.sleep(0.5)
     saida = {"gerado_em": dt.datetime.now(BRT).isoformat(timespec="seconds"), "data_ref": c["data_ref"], "fichas": fichas, "falhas": falhas,
@@ -842,6 +910,7 @@ def teste_extras(ent):
     ebitda = 1e9
     f = {k: num(geral[k]) for k in ("pl", "ll12", "ll3", "pvp", "dy", "roic", "lc", "cresc")}
     f.update(preco=num(geral["preco"]), pe=num(geral["pe"]), dl=num(geral["dl_ebitda"]) * ebitda, ev=ebitda * 5, ev_ebitda=5)
+    f_acao = dict(f)
     r, motivo = pontuar_extra("Ação", f, num(geral["var_stress"]), None)
     assert motivo is None and abs(r["total"] - base[geral["ticker"]]["total"]) < 0.06, (geral["ticker"], r, base[geral["ticker"]]["total"])
     tij = next(r for r in ent if r["classe"] == "FII" and r["tipo"] == "tijolo")
@@ -849,6 +918,32 @@ def teste_extras(ent):
     f.update(vol=num(tij["vol_mi"]) * 1e6, relatorio="x")
     r, motivo = pontuar_extra("FII", f, num(tij["var_stress"]), num(tij["fii_mediana"]))
     assert motivo is None and abs(r["total"] - base[tij["ticker"]]["total"]) < 0.06, (tij["ticker"], r, base[tij["ticker"]]["total"])
+    cfg_real = cfg()
+    fa, ff = dict(f_acao), dict(f)
+
+    # linha no formato de ativos.json e serie de precos (mesmas chaves que os ativos do ranking)
+    ts0 = int(dt.datetime(2026, 10, 1, 13, tzinfo=dt.timezone.utc).timestamp())
+    js = {"chart": {"result": [{"meta": {"longName": "Teste SA"}, "timestamp": [ts0 + 86400 * k for k in range(30)] + [ts0 + 86400 * 30],
+                                "indicators": {"quote": [{"open": [1.0] * 31, "high": [2.0] * 31, "low": [0.5] * 31, "close": [1.5] * 30 + [None], "volume": [100] * 31}]}}]}}
+    nome, rws = rows_de_chart(js)
+    assert nome == "Teste SA" and len(rws) == 30 and rws[0]["c"] == 1.5, "pregao sem fechamento deve ser descartado"
+    ref = dt.date.fromisoformat(cfg_real["data_ref"])
+    dd = [(ref - dt.timedelta(days=k)).isoformat() for k in range(120, -1, -1)]
+    rows = [{"d": d, "o": 10 + 0.01 * i, "h": 10.3 + 0.01 * i, "l": 9.7 + 0.01 * i, "c": 10 + 0.01 * i, "v": 1000 + i} for i, d in enumerate(dd)]
+    ativos_real = json.loads((OUT / "ativos.json").read_text(encoding="utf-8"))
+    for classe, orig, fund in (("Ação", geral, fa), ("FII", tij, ff)):
+        fch = construir_ficha("TSTE3", "Teste", {"d": dd, "c": [r["c"] for r in rows], "div": []}, fund, cfg_real, num(tij["fii_mediana"]), rows, "Segmento X")
+        a = fch["ativo"]
+        assert a and a["posicao"] is None and a["sinal"] == "adicionado" and a["classe"] == classe and a["segmento"] == "Segmento X"
+        ref_keys = set(next(x for x in ativos_real if x["classe"] == classe))
+        faltam = ref_keys - set(a)
+        assert not faltam, f"{classe}: chaves do ranking ausentes na linha adicionada: {faltam}"
+        assert a["preco_atual"] == round(rows[-1]["c"], 2) and a["score"] == fch["score"]["total"] and "_row" not in fch["score"]
+        assert abs(a["var_estresse"] - fch["metricas"]["var_estresse"]) < 0.011, "var_estresse (OHLC) = var_estresse (fechamentos)"
+        pr = fch["precos"]
+        assert pr and all(x["ticker"] == "TSTE3" for x in pr) and pr[-1]["data"] == cfg_real["data_ref"]
+        assert [x["base100"] for x in pr if x["data"] == cfg_real["data_1m"]] == [100.0], "base100 = 100 em data_1m"
+
     # dado faltando nunca vira nota inventada
     assert pontuar_extra("Ação", {"pl": None}, -5.0, None)[0] is None and pontuar_extra("Ação", f, None, None)[0] is None
     assert pontuar_extra("Ação", {**{k: None for k in LABELS}, "pl": -1.0, "ll12": 1, "ll3": 1, "pvp": 1}, -5.0, None)[0] is None
