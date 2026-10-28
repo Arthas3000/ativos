@@ -288,7 +288,7 @@ def cmd_catalogo():
 
 
 # ---------------------------------------------------------------- ativos adicionados pelo usuario (so o ticker)
-EXTRAS_MAX = 30
+EXTRAS_MAX = 100
 TICKER_RE = re.compile(r"[A-Z][A-Z0-9]{3}\d{1,2}B?")
 
 
