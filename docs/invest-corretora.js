@@ -70,6 +70,17 @@
   };
   const dtValida = (s) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s || '') && !Number.isNaN(Date.parse(String(s).slice(0, 16)));
   const lerInv = (fn, pad0) => { try { return fn(); } catch (e) { return pad0; } };
+  const hojeISO = () => agoraLocal().slice(0, 10);
+  // modo Fácil: mesma tela, menos colunas e formulários curtos (o INVModo carrega depois; o atributo do <html> já vale)
+  const modoFacil = () => (window.INVModo ? window.INVModo.atual() === 'facil' : document.documentElement.getAttribute('data-modo') === 'facil');
+  const soAv = (n) => { n.setAttribute('data-so-avancado', '1'); return n; };
+  // código digitado (com ou sem o F do fracionário, ou "PETR4 — Petrobras") → ticker válido ou null
+  const tickerDe = (txt) => {
+    const t = String(txt || '').trim().toUpperCase().split(/[\s—–]+/)[0];
+    const v = t && C.validarTicker ? C.validarTicker(t) : null;
+    return v && v.ok && /^[A-Z]{4}\d{1,2}$/.test(v.ticker) ? v.ticker : null;
+  };
+  const codNeg = (t) => lerInv(() => INV.codigoNegociacao(t), t);
 
   const injetarCss = () => {
     if (document.getElementById('inv-cor-css')) return;
@@ -183,7 +194,7 @@
   R.conc = h('div');
   R.avisosArm = h('div', { class: 'inv-cor-armaz', 'aria-live': 'polite' });
   const cResumo = card('Resumo da carteira real',
-    h('p', { class: 'pb-note' }, 'Só o que você registrou, avaliado pelo último fechamento disponível (ou pelo preço manual de um ativo seu). Material educacional; não é recomendação.'),
+    h('p', { class: 'pb-note' }, 'Só o que você registrou, pelo preço mais recente disponível. Não é recomendação.'),
     R.tiles, R.avisosResumo);
 
   /* 2. Posições */
@@ -192,7 +203,7 @@
   R.legend = h('div', { class: 'pb-legend' });
   R.chart = h('div', { class: 'pb-chart' });
   const cPos = card('Posições',
-    h('p', { class: 'pb-note' }, 'Posições reais registradas por você — não incluem simulações nem propostas. O % atual é calculado sobre o valor das posições com preço (sem o caixa). O alvo % é salvo neste aparelho.'),
+    h('p', { class: 'pb-note' }, 'Quanto você tem de cada ativo, o preço médio que pagou e quanto vale hoje. ', h('span', { 'data-so-avancado': '1' }, 'O % atual é calculado sobre o valor das posições com preço (sem o caixa). O alvo % é salvo neste aparelho.'), h('span', { 'data-so-facil': '1' }, 'O alvo % (meta de distribuição) é definido no modo Avançado.')),
     R.tabPos, R.msgAlvo,
     h('h3', null, 'Atual × alvo'), R.legend, R.chart);
   R.legend.appendChild(h('span', null, h('i', { class: 'pb-sw', style: 'background:' + cor(0) }), 'Atual'));
@@ -245,18 +256,228 @@
     R.erros,
     h('div', { class: 'inv-actions inv-cor-row' }, R.btnReg, R.btnLimpar),
     R.ok);
-  const cTrade = card('Comprar ou vender um ativo',
+  const cTrade = soAv(card('Comprar ou vender um ativo',
     h('p', { class: 'pb-note' }, 'Em duas etapas: primeiro veja quanto dá para comprar (estimativa); depois, já com a ordem executada na sua corretora, registre o preço e a quantidade reais.'),
     tipoGrupo, F.ativo.wrap, R.datalist, R.info, R.posHint,
     h('div', { class: 'inv-cor-row' }, R.cotBox, R.btnCot, R.btnUsarCot),
     h('div', { class: 'inv-cor-grid' }, F.preco.wrap, F.valor.wrap),
     h('h3', null, 'Estimativa'), R.estimativa, R.estAviso,
-    R.formReg);
+    R.formReg));
 
   /* 4. Assistente (preenchido por invest-assistente.js) */
-  const cAssist = card('Assistente de alocação',
-    h('p', { class: 'pb-note' }, 'Propõe como dividir um aporte entre os ativos escolhidos. A proposta não é uma ordem: nada é comprado até você registrar o que executou.'),
-    h('div', { id: 'inv-assistente' }));
+  const cAssist = soAv(card('Assistente de alocação (vários ativos)',
+    h('p', { class: 'pb-note' }, 'Divide um aporte entre vários ativos, pelas metas de alocação e pelo score, em cinco passos. A proposta não é uma ordem: nada é comprado até você registrar o que executou.'),
+    h('div', { id: 'inv-assistente' })));
+
+  /* 3a. Registro rápido: compra ou venda numa tela só, com o preço que você pagou (é o formulário do modo Fácil) */
+  const Q = { tipo: 'compra', editandoId: null, dataOrig: null, ticker: null, cot: null, seq: 0 };
+  const FQ = {};
+  R.qTipoBtns = {};
+  const qTipo = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Compra ou venda' });
+  [['compra', 'Comprei'], ['venda', 'Vendi']].forEach(([t, r]) => {
+    const b = h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': t === Q.tipo ? 'true' : 'false' }, r);
+    b.addEventListener('click', () => { Q.tipo = t; marcarQ(); dicaQ(); totalQ(); });
+    R.qTipoBtns[t] = b; qTipo.appendChild(b);
+  });
+  FQ.ativo = campo('cor-q-ativo', 'Ativo', { tipo: 'search', placeholder: 'Ex.: PETR4', ajuda: 'Com ou sem o F do fracionário (PETR4 ou PETR4F).' });
+  FQ.ativo.input.setAttribute('list', 'cor-ativo-lista');
+  FQ.ativo.input.setAttribute('autocapitalize', 'characters');
+  FQ.qtd = campo('cor-q-qtd', 'Quantidade de cotas', { inputmode: 'numeric', placeholder: '0' });
+  FQ.preco = campo('cor-q-preco', 'Preço pago por cota (R$)', { inputmode: 'decimal', placeholder: '0,00' });
+  FQ.data = campo('cor-q-data', 'Data', { tipo: 'date', valor: hojeISO() });
+  FQ.taxas = campo('cor-q-taxas', 'Taxas (R$, opcional)', { inputmode: 'decimal', placeholder: '0,00' });
+  R.qDica = h('div', { class: 'inv-cor-row', 'aria-live': 'polite' });
+  R.qTotal = h('p', { class: 'pb-text', 'aria-live': 'polite' });
+  R.qBanner = h('p', { class: 'inv-cor-banner', hidden: true, role: 'status' });
+  R.qErro = h('div', { class: 'inv-err', role: 'alert', hidden: true });
+  R.qOk = h('p', { class: 'pb-note pos', 'aria-live': 'polite' });
+  R.qBtn = h('button', { type: 'submit', class: 'pb-btn inv-pri' }, 'Salvar compra');
+  R.qLimpar = h('button', { type: 'button', class: 'pb-btn' }, 'Limpar');
+  R.qForm = h('form', { novalidate: true, class: 'inv-cor-sub', style: 'border-top:0;padding-top:0', 'aria-label': 'Registrar compra ou venda' },
+    R.qBanner, qTipo,
+    h('div', { class: 'inv-cor-grid' }, FQ.ativo.wrap, FQ.qtd.wrap, FQ.preco.wrap, FQ.data.wrap, FQ.taxas.wrap),
+    R.qDica, R.qTotal, R.qErro,
+    h('div', { class: 'inv-actions inv-cor-row' }, R.qBtn, R.qLimpar), R.qOk);
+  const cRapido = h('div', { class: 'pb-card', 'data-so-facil': '1' }, h('h2', null, 'Registrar compra ou venda'),
+    h('p', { class: 'pb-note' }, 'Anote o que você executou na corretora. O app calcula o preço médio e o resultado.'), R.qForm);
+
+  function marcarQ() {
+    Object.keys(R.qTipoBtns).forEach((t) => R.qTipoBtns[t].setAttribute('aria-pressed', String(t === Q.tipo)));
+    FQ.preco.wrap.querySelector('label').textContent = Q.tipo === 'compra' ? 'Preço pago por cota (R$)' : 'Preço de venda por cota (R$)';
+    R.qBtn.textContent = Q.editandoId ? 'Salvar correção' : (Q.tipo === 'compra' ? 'Salvar compra' : 'Salvar venda');
+  }
+  function posDe(t, semId) {
+    const ef = C.efetivas(lerInv(() => INV.estado().transacoes, []) || []).filter((x) => !semId || x.id !== semId);
+    return C.posicoes(ef)[t] || null;
+  }
+  // preço de hoje (ao vivo com token da brapi; senão o último fechamento) e, na venda, quantas cotas você tem
+  function dicaQ() {
+    const t = tickerDe(FQ.ativo.input.value);
+    if (t !== Q.ticker) { Q.ticker = t; Q.cot = null; }
+    R.qDica.replaceChildren();
+    if (!t) return;
+    const p = posDe(t, Q.editandoId);
+    const partes = [];
+    if (Q.cot && Q.cot.precoCent) {
+      partes.push(h('span', { class: 'pb-note' }, 'Preço de hoje: ' + brl(Q.cot.precoCent)), chipEstado(Q.cot),
+        h('button', { type: 'button', class: 'pb-btn', onclick: () => { FQ.preco.input.value = inCents(Q.cot.precoCent); FQ.preco.setErro(''); totalQ(); } }, 'Usar este preço'));
+    } else if (Q.cot) partes.push(h('span', { class: 'pb-note' }, 'Sem preço de hoje para ' + t + '. Digite o preço da nota.'));
+    if (p) partes.push(h('span', { class: 'pb-note' }, 'Você tem ' + fmtN(p.qtd, 0) + ' cota(s) de ' + t + ', preço médio ' + brl(p.precoMedioCent) + '.'));
+    else if (Q.tipo === 'venda') partes.push(h('span', { class: 'pb-note neg' }, 'Você não tem ' + t + ' registrado.'));
+    R.qDica.append(...partes);
+    if (!Q.cot) {
+      const seq = ++Q.seq;
+      Promise.resolve(lerInv(() => INV.cotacao(t), null)).then((c) => { if (seq === Q.seq && t === Q.ticker) { Q.cot = c || { precoCent: null }; dicaQ(); } }, () => {});
+    }
+  }
+  function totalQ() {
+    const q = inteiro(FQ.qtd.input.value), p = money(FQ.preco.input.value);
+    const tt = FQ.taxas.input.value.trim(), tx = tt === '' ? 0 : money(tt);
+    if (!(q > 0) || !(p > 0) || tx === null || tx < 0) { R.qTotal.textContent = ''; return; }
+    const bruto = q * p, total = Q.tipo === 'compra' ? bruto + tx : bruto - tx;
+    R.qTotal.textContent = (Q.tipo === 'compra' ? 'Total pago: ' : 'Total recebido: ') + brl(total) + ' (' + fmtN(q, 0) + ' × ' + brl(p) + (tx ? (Q.tipo === 'compra' ? ' + ' : ' − ') + brl(tx) + ' de taxas' : '') + ').';
+  }
+  function limparQ(msg) {
+    Q.editandoId = null; Q.dataOrig = null; Q.ticker = null; Q.cot = null; Q.seq++;
+    [FQ.ativo, FQ.qtd, FQ.preco, FQ.taxas].forEach((f) => { f.input.value = ''; f.setErro(''); });
+    FQ.data.input.value = hojeISO(); FQ.data.setErro('');
+    R.qBanner.hidden = true; R.qErro.hidden = true; R.qErro.textContent = ''; R.qTotal.textContent = ''; R.qDica.replaceChildren();
+    R.qOk.textContent = msg || '';
+    marcarQ();
+  }
+  function salvarQ() {
+    R.qOk.textContent = ''; R.qErro.hidden = true;
+    let t = tickerDe(FQ.ativo.input.value);
+    const q = inteiro(FQ.qtd.input.value), p = money(FQ.preco.input.value), d = FQ.data.input.value;
+    const tt = FQ.taxas.input.value.trim(), tx = tt === '' ? 0 : money(tt);
+    FQ.ativo.setErro(t ? '' : 'Digite um código válido (ex.: PETR4).');
+    FQ.qtd.setErro(q > 0 ? '' : 'Informe quantas cotas (número inteiro).');
+    FQ.preco.setErro(p > 0 ? '' : 'Informe o preço por cota.');
+    FQ.taxas.setErro(tx !== null && tx >= 0 ? '' : 'Taxas inválidas (pode deixar vazio).');
+    FQ.data.setErro(/^\d{4}-\d{2}-\d{2}$/.test(d) ? '' : 'Informe a data.');
+    if (!t || !(q > 0) || !(p > 0) || tx === null || tx < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    // hoje: grava a hora atual; outro dia: só a data (na correção, mantém a data/hora original se o dia não mudou)
+    const data = Q.dataOrig && Q.dataOrig.slice(0, 10) === d ? Q.dataOrig : (d === hojeISO() ? agoraLocal() : d);
+    const bruto = q * p;
+    const tx0 = { tipo: Q.tipo, ticker: t, data, qtd: q, precoCent: p, taxasCent: tx, valorCent: Q.tipo === 'compra' ? bruto + tx : bruto - tx,
+      moeda: 'BRL', status: 'executada', fontePreco: 'manual', obs: '', substitui: null };
+    try {
+      t = INV.garantirAtivo(t);
+      const corrigindo = !!Q.editandoId;
+      if (corrigindo) INV.corrigirTx(Q.editandoId, tx0); else INV.adicionarTx(tx0);
+      const pos = posDe(t);
+      limparQ((corrigindo ? 'Correção salva: ' : (Q.tipo === 'compra' ? 'Compra salva: ' : 'Venda salva: ')) + fmtN(q, 0) + ' ' + t + ' a ' + brl(p) + '.'
+        + (pos ? ' Agora você tem ' + fmtN(pos.qtd, 0) + ' cota(s), preço médio ' + brl(pos.precoMedioCent) + '.' : ' Posição zerada.'));
+    } catch (e) { R.qErro.textContent = msgErro(e); R.qErro.hidden = false; }
+  }
+  function carregarQ(tx) {
+    limparQ('');
+    Q.editandoId = tx.id; Q.dataOrig = tx.data; Q.tipo = tx.tipo;
+    FQ.ativo.input.value = tx.ticker; FQ.qtd.input.value = String(tx.qtd); FQ.preco.input.value = inCents(tx.precoCent);
+    FQ.taxas.input.value = tx.taxasCent ? inCents(tx.taxasCent) : ''; FQ.data.input.value = String(tx.data).slice(0, 10);
+    R.qBanner.hidden = false;
+    R.qBanner.textContent = 'Corrigindo ' + (TIPOS[tx.tipo] || tx.tipo).toLowerCase() + ' de ' + tx.ticker + ' de ' + fmtData(tx.data) + '. Ao salvar, ela é substituída.';
+    marcarQ(); dicaQ(); totalQ();
+    INV.ir(ID, 'operar');
+    FQ.qtd.input.focus();
+  }
+  FQ.ativo.input.addEventListener('input', dicaQ);
+  FQ.ativo.input.addEventListener('change', () => { const v = FQ.ativo.input.value.trim(); FQ.ativo.setErro(v && !tickerDe(v) ? 'Código inválido (ex.: PETR4).' : ''); dicaQ(); });
+  [FQ.qtd, FQ.preco, FQ.taxas].forEach((f) => f.input.addEventListener('input', totalQ));
+  R.qLimpar.addEventListener('click', () => limparQ(''));
+  R.qForm.addEventListener('submit', (ev) => { ev.preventDefault(); salvarQ(); });
+
+  /* 4a. Planejar compra: valor → quantas cotas (mercado fracionário: de 1 em 1) */
+  const P = { ticker: null, cot: null, seq: 0, precoTocado: false, ultimo: null };
+  const FP = {};
+  FP.ativo = campo('cor-p-ativo', 'Ativo', { tipo: 'search', placeholder: 'Ex.: PETR4' });
+  FP.ativo.input.setAttribute('list', 'cor-ativo-lista');
+  FP.ativo.input.setAttribute('autocapitalize', 'characters');
+  FP.valor = campo('cor-p-valor', 'Quanto quer investir (R$)', { inputmode: 'decimal', placeholder: 'Ex.: 1.000,00' });
+  FP.preco = campo('cor-p-preco', 'Preço por cota (R$)', { inputmode: 'decimal', placeholder: '0,00', ajuda: 'Preenchido com o preço de hoje; pode alterar.' });
+  R.pCot = h('div', { class: 'inv-cor-row', 'aria-live': 'polite' });
+  R.pRes = h('div', { 'aria-live': 'polite', style: 'display:grid;gap:var(--cds-gap-sm)' });
+  const cPlano = h('div', { class: 'pb-card' }, h('h2', null, 'Quantas cotas comprar'),
+    h('p', { class: 'pb-note' }, 'Diga o ativo e quanto quer investir. A conta usa o mercado fracionário (de 1 em 1 cota) e os custos de Ajustes.'),
+    h('div', { class: 'inv-cor-grid' }, FP.ativo.wrap, FP.valor.wrap, FP.preco.wrap), R.pCot, R.pRes);
+
+  function cotP() {
+    const t = P.ticker;
+    R.pCot.replaceChildren();
+    if (!t) return;
+    if (!P.cot) { R.pCot.append(h('span', { class: 'pb-note' }, 'Buscando o preço de ' + t + '…')); return; }
+    if (P.cot.precoCent) R.pCot.append(...[h('span', { class: 'pb-note' }, 'Preço de hoje: ' + brl(P.cot.precoCent)), chipEstado(P.cot),
+      P.precoTocado ? h('button', { type: 'button', class: 'pb-btn', onclick: () => { P.precoTocado = false; FP.preco.input.value = inCents(P.cot.precoCent); calcP(); cotP(); } }, 'Usar o preço de hoje') : null].filter(Boolean));
+    else R.pCot.append(h('span', { class: 'pb-note' }, 'Sem preço de hoje para ' + t + ': digite o preço por cota.'));
+  }
+  function selP() {
+    const t = tickerDe(FP.ativo.input.value);
+    if (t === P.ticker) { calcP(); return; }
+    P.ticker = t; P.cot = null; P.precoTocado = false;
+    if (!t) { FP.preco.input.value = ''; cotP(); calcP(); return; }
+    cotP(); calcP();
+    const seq = ++P.seq;
+    Promise.resolve(lerInv(() => INV.cotacao(t), null)).then((c) => {
+      if (seq !== P.seq || t !== P.ticker) return;
+      P.cot = c || { precoCent: null };
+      if (P.cot.precoCent && !P.precoTocado) FP.preco.input.value = inCents(P.cot.precoCent);
+      cotP(); calcP();
+    }, () => { if (seq === P.seq) { P.cot = { precoCent: null }; cotP(); } });
+  }
+  function calcP() {
+    const t = P.ticker, v = money(FP.valor.input.value), p = money(FP.preco.input.value), c = cfg();
+    P.ultimo = null;
+    if (!t) { R.pRes.replaceChildren(FP.ativo.input.value.trim() ? h('p', { class: 'pb-note neg' }, 'Código inválido (ex.: PETR4).') : h('span')); return; }
+    if (!(v > 0) || !(p > 0)) { R.pRes.replaceChildren(h('p', { class: 'pb-note' }, !(v > 0) ? 'Informe quanto quer investir.' : 'Informe o preço por cota.')); return; }
+    const r = C.estimarQuantidade({ valorCent: v, precoCent: p, lote: 1, taxaFixaCent: c.taxaFixaCent, taxaPct: c.taxaPct });
+    const pos = posDe(t), cod = codNeg(t);
+    if (!(r.qtd > 0)) {
+      R.pRes.replaceChildren(h('p', { class: 'pb-text neg' }, 'Com ' + brl(v) + ' não dá para comprar 1 cota de ' + t + ' (' + brl(p) + (r.aviso ? '; ' + r.aviso : '') + ').'));
+      return;
+    }
+    P.ultimo = { ticker: t, qtd: r.qtd, precoCent: p };
+    try { INV.preferencias.gravar((u) => { u.planejou = true; }); } catch (e) { /* ok */ }
+    const depois = pos ? (pos.custoCent + r.totalCent) / (pos.qtd + r.qtd) : null;
+    R.pRes.replaceChildren(...[
+      h('div', { class: 'pb-tiles' },
+        tile('Comprar', fmtN(r.qtd, 0) + (r.qtd === 1 ? ' cota' : ' cotas'), 'código ' + cod + (cod !== t ? ' (fracionário)' : '')),
+        tile('Total', brl(r.totalCent), fmtN(r.qtd, 0) + ' × ' + brl(p) + (r.taxasCent ? ' + ' + brl(r.taxasCent) + ' de taxas' : '')),
+        tile('Sobra', brl(r.sobraCent), r.sobraCent >= p ? 'não completa outra cota com as taxas' : 'menos que 1 cota')),
+      pos ? h('p', { class: 'pb-note' }, 'Você já tem ' + fmtN(pos.qtd, 0) + ' cota(s) a ' + brl(pos.precoMedioCent) + '. Depois desta compra: ' + fmtN(pos.qtd + r.qtd, 0) + ' cotas, preço médio de cerca de ' + brl(Math.round(depois)) + '.') : null,
+      h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: () => irRegistrar(t, 'compra', { qtd: r.qtd, precoCent: p }) }, 'Já comprei: registrar')),
+      h('p', { class: 'pb-disc' }, 'Planejamento, não é ordem nem recomendação. O preço na corretora pode ser diferente.')].filter(Boolean));
+  }
+  FP.ativo.input.addEventListener('input', selP);
+  FP.ativo.input.addEventListener('change', selP);
+  FP.valor.input.addEventListener('input', calcP);
+  FP.preco.input.addEventListener('input', () => { P.precoTocado = FP.preco.input.value.trim() !== ''; cotP(); calcP(); });
+
+  // atalhos usados pela tela Hoje (lista de ativos) e pelo planejamento
+  function irRegistrar(t, tipo, extra) {
+    extra = extra || {};
+    if (modoFacil()) {
+      limparQ('');
+      Q.tipo = tipo || 'compra'; FQ.ativo.input.value = t || '';
+      if (extra.qtd) FQ.qtd.input.value = String(extra.qtd);
+      if (extra.precoCent) FQ.preco.input.value = inCents(extra.precoCent);
+      INV.ir(ID, 'operar'); marcarQ(); dicaQ(); totalQ();
+      (extra.qtd ? FQ.preco : t ? FQ.qtd : FQ.ativo).input.focus();
+    } else {
+      limparTrade('');
+      S.tipo = tipo || 'compra';
+      if (t) { try { INV.garantirAtivo(t); } catch (e) { /* aparece como erro no campo */ } const a = INV.ativo(t); F.ativo.input.value = t + (a ? ' — ' + a.nome : ''); }
+      if (extra.qtd && extra.precoCent) F.valor.input.value = inCents(extra.qtd * extra.precoCent);
+      INV.ir(ID, 'operar'); marcarTipo(); selecionar(resolverTicker(F.ativo.input.value));
+      (t ? F.valor : F.ativo).input.focus();
+    }
+  }
+  function irPlanejar(t) {
+    INV.ir(ID, 'aporte');
+    FP.ativo.input.value = t || ''; selP();
+    (t ? FP.valor : FP.ativo).input.focus();
+  }
+  INV.registrarOperacao = irRegistrar;
+  INV.planejarCompra = irPlanejar;
 
   /* 5. Caixa */
   const FC = {};
@@ -287,11 +508,11 @@
   R.txMsg = h('p', { class: 'pb-note', 'aria-live': 'polite' });
   R.tabTx = h('div', { class: 'pb-tablewrap' });
   const cTx = card('Transações',
-    h('p', { class: 'pb-note' }, 'Tudo o que você registrou, do mais recente para o mais antigo. "Corrigir" grava uma versão nova que substitui a anterior; "Anular" tira a transação das contas. Nada é apagado: o histórico completo fica disponível na opção abaixo.'),
-    h('div', { class: 'pb-controls inv-cor-filtros' },
+    h('p', { class: 'pb-note' }, 'Tudo o que você registrou, do mais recente para o mais antigo.', h('span', { 'data-so-avancado': '1' }, ' "Corrigir" grava uma versão nova que substitui a anterior; "Anular" tira a transação das contas. Nada é apagado: o histórico completo fica disponível na opção abaixo.')),
+    h('div', { class: 'pb-controls inv-cor-filtros', 'data-so-avancado': '1' },
       h('label', { class: 'inv-sr', for: 'cor-tx-busca' }, 'Buscar transação'), R.txBusca,
       h('label', { class: 'inv-sr', for: 'cor-tx-tipo' }, 'Tipo de transação'), R.txTipo, R.txConta),
-    h('label', { class: 'inv-cor-check', for: 'cor-todas' }, R.chkTodas, h('span', null, 'Mostrar também as versões corrigidas e as anulações')),
+    h('label', { class: 'inv-cor-check', for: 'cor-todas', 'data-so-avancado': '1' }, R.chkTodas, h('span', null, 'Mostrar também as versões corrigidas e as anulações')),
     R.txMsg, R.tabTx);
 
   /* 7. Meus ativos */
@@ -305,23 +526,24 @@
   R.atErro = h('div', { class: 'inv-err', role: 'alert', hidden: true });
   R.atForm = h('form', { novalidate: true, class: 'inv-cor-sub', 'aria-label': 'Adicionar ativo próprio' },
     h('h3', null, 'Adicionar ativo'),
-    h('div', { class: 'inv-cor-grid' }, FA.ticker.wrap, FA.nome.wrap, FA.classe.wrap, FA.lote.wrap, FA.preco.wrap),
+    h('div', { class: 'inv-cor-grid' }, FA.ticker.wrap, FA.nome.wrap, FA.classe.wrap, soAv(FA.lote.wrap), FA.preco.wrap),
     R.atErro, h('div', { class: 'inv-actions inv-cor-row' }, h('button', { type: 'submit', class: 'pb-btn inv-pri' }, 'Adicionar ativo')), R.atMsg);
   R.atLista = h('div');
   const cAtivos = card('Meus ativos',
-    h('p', { class: 'pb-note' }, 'Ativos que você cadastra (só em reais, B3). Eles já podem ser comprados e entrar no planejamento de aporte. Para aparecerem no Simulador, o ticker precisa entrar na lista "extras" (veja em Ajustes) e o histórico chega na próxima atualização de dados.'),
-    h('div', { class: 'inv-cor-row' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir('config', 'extras') }, 'Abrir Ajustes › Ativos extras')),
+    h('p', { class: 'pb-note' }, 'Ativos fora do painel que você registrou (só em reais, B3). Um código novo usado numa compra entra aqui sozinho.',
+      h('span', { 'data-so-avancado': '1' }, ' Para aparecerem no Simulador, o ticker precisa entrar na lista "extras" (veja em Ajustes) e o histórico chega na próxima atualização de dados.')),
+    h('div', { class: 'inv-cor-row', 'data-so-avancado': '1' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir('config', 'extras') }, 'Abrir Ajustes › Ativos extras')),
     R.atLista, R.atForm);
 
   /* 0. Primeiros passos e atalhos (no Resumo) */
   R.passos = h('ol', { class: 'inv-passos' });
   const cPassos = card('Primeiros passos',
-    h('p', { class: 'pb-note' }, 'Quatro passos para a carteira refletir o que você tem na corretora. Este quadro some quando tudo estiver feito.'),
+    h('p', { class: 'pb-note' }, 'Para a carteira refletir o que você tem na corretora. Este quadro some quando tudo estiver feito.'),
     R.passos);
   const atalho = (rotulo, secao, pri) => h('button', { type: 'button', class: 'pb-btn' + (pri ? ' inv-pri' : ''), onclick: () => INV.ir(ID, secao) }, rotulo);
   const cAtalhos = card('O que você quer fazer?',
     h('div', { class: 'inv-atalhos' },
-      atalho('Registrar depósito', 'caixa'), atalho('Comprar ou vender', 'operar', true), atalho('Planejar aporte', 'aporte'),
+      atalho('Registrar compra ou venda', 'operar', true), atalho('Planejar compra', 'aporte'), atalho('Registrar depósito', 'caixa'),
       atalho('Ver posições', 'posicoes'), atalho('Ver transações', 'transacoes')));
   const PASSOS = [
     ['caixa', 'Registre o dinheiro que está na corretora', 'Um depósito com o saldo atual da conta.', (st, ef) => ef.some((t) => t.tipo === 'deposito')],
@@ -329,12 +551,19 @@
     ['posicoes', 'Defina o alvo de cada ativo', 'Quanto da carteira cada um deve ter (em %).', (st) => Object.keys(st.alvos || {}).length > 0],
     ['aporte', 'Planeje o próximo aporte', 'O assistente divide o dinheiro novo entre os ativos abaixo do alvo.', (st, ef) => ef.some((t) => t.obs === 'Assistente de alocação')]
   ];
+  // no Fácil: sem metas de alocação nem assistente; o caixa é opcional
+  const PASSOS_FACIL = [
+    ['operar', 'Registre o que você já tem', 'Uma compra por ativo, com a quantidade e o preço que você pagou.', (st, ef) => ef.some((t) => t.tipo === 'compra')],
+    ['aporte', 'Planeje a próxima compra', 'Diga quanto quer investir e veja quantas cotas comprar.', () => !!lerInv(() => INV.preferencias.ler().planejou, false)],
+    ['caixa', 'Opcional: registre o dinheiro na corretora', 'Um depósito com o saldo da conta, para acompanhar o caixa.', (st, ef) => ef.some((t) => t.tipo === 'deposito')]
+  ];
   function desenharPassos() {
     let st, ef;
     try { st = INV.estado(); ef = C.efetivas(st.transacoes || []); } catch (e) { return; }
-    const feitos = PASSOS.map((p) => !!p[3](st, ef));
-    cPassos.hidden = feitos.every(Boolean);
-    R.passos.replaceChildren(...PASSOS.map((p, i) => h('li', { class: feitos[i] ? 'ok' : '' },
+    const lista = modoFacil() ? PASSOS_FACIL : PASSOS;
+    const feitos = lista.map((p) => !!p[3](st, ef));
+    cPassos.hidden = (lista === PASSOS_FACIL ? feitos.slice(0, 2) : feitos).every(Boolean);   // o passo do caixa é opcional
+    R.passos.replaceChildren(...lista.map((p, i) => h('li', { class: feitos[i] ? 'ok' : '' },
       h('span', { class: 'ck', 'aria-hidden': 'true' }, feitos[i] ? '✓' : String(i + 1)),
       h('span', { class: 't' }, h('b', null, p[1]), h('span', null, p[2]), h('span', { class: 'inv-sr' }, feitos[i] ? ' (feito)' : ' (a fazer)')),
       feitos[i] ? h('span') : h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, p[0]) }, 'Fazer agora'))));
@@ -346,10 +575,9 @@
     itens: [
       { id: 'resumo', rotulo: 'Resumo', nodes: [cResumo, R.conc, cPassos, cAtalhos] },
       { id: 'posicoes', rotulo: 'Posições', nodes: [cPos],
-        intro: 'Quanto você tem de cada ativo, quanto pagou e quanto vale hoje. Aqui você também define o alvo (%) de cada um.' },
-      { id: 'operar', rotulo: 'Comprar ou vender', nodes: [cTrade] },
-      { id: 'aporte', rotulo: 'Planejar aporte', nodes: [cAssist],
-        intro: 'Em cinco passos: escolha os ativos, diga quanto vai investir, veja a proposta, ajuste e registre o que comprou.' },
+ },
+      { id: 'operar', rotulo: 'Comprar ou vender', nodes: [cRapido, cTrade] },
+      { id: 'aporte', rotulo: 'Planejar compra', nodes: [cPlano, cAssist] },
       { id: 'caixa', rotulo: 'Caixa', nodes: [cCaixa] },
       { id: 'transacoes', rotulo: 'Transações', nodes: [cTx] },
       { id: 'ativos', rotulo: 'Meus ativos', nodes: [cAtivos] }
@@ -388,7 +616,13 @@
     const resPct = (temPos && custoPrec > 0) ? res / custoPrec * 100 : null;
     const nota = !datas.length ? (temPos ? 'sem preços' : 'sem posições')
       : (datas[0] === datas[datas.length - 1] ? 'preços de ' + fmtData(datas[0]) : 'preços de ' + fmtData(datas[0]) + ' a ' + fmtData(datas[datas.length - 1]));
-    R.tiles.replaceChildren(
+    // Fácil sem caixa registrado: o caixa ficaria negativo só por causa das compras; mostra o que importa
+    const semCaixa = modoFacil() && !d.ef.some((t) => t.tipo === 'deposito' || t.tipo === 'retirada');
+    if (semCaixa) R.tiles.replaceChildren(
+      tile('Total investido', brl(custoTot), 'o que você pagou, com taxas'),
+      tile('Valor hoje', brl(mercado), nota),
+      tile('Resultado', brlS(res), resPct === null ? 'sobre o que você pagou' : fmtS(resPct, 2) + '% sobre o que você pagou', cls(res)));
+    else R.tiles.replaceChildren(
       tile('Caixa disponível', brl(d.caixa), 'depósitos − retiradas − compras + vendas', d.caixa < 0 ? 'neg' : ''),
       tile('Valor de mercado das posições', brl(mercado), nota),
       tile('Total (caixa + posições)', brl(d.caixa + mercado), 'valores registrados por você'),
@@ -396,7 +630,7 @@
       tile('Resultado não realizado', brlS(res), resPct === null ? 'sobre o custo dos ativos com preço' : fmtS(resPct, 2) + '% sobre o custo', cls(res)));
     const av = [];
     if (d.aloc.semPreco && d.aloc.semPreco.length) av.push(avisoEl('Sem preço de referência para: ' + d.aloc.semPreco.join(', ') + '. Esses ativos não entram no valor de mercado nem no resultado. Informe um preço manual em "Meus ativos" (ativos próprios) ou aguarde a próxima atualização de dados.', 'warn'));
-    if (d.caixa < 0) av.push(avisoEl('O caixa registrado está negativo. Confira se falta registrar um depósito.', 'warn'));
+    if (d.caixa < 0 && !semCaixa) av.push(avisoEl('O caixa registrado está negativo. Confira se falta registrar um depósito.', 'warn'));
     R.avisosResumo.replaceChildren(...av);
     // concentração: mesmo cálculo do Resumo do modo Fácil (INVCalc.concentracao); o detalhe aparece só no Avançado
     const vals = d.aloc.linhas.filter((l) => l.valorCent > 0).map((l) => l.valorCent);
@@ -420,26 +654,31 @@
     }).sort((x, y) => (y.valor === null ? -1 : y.valor) - (x.valor === null ? -1 : x.valor) || (x.t < y.t ? -1 : 1));
     if (!rows.length) {
       R.tabPos.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma posição registrada ainda. Registre o que você já tem na corretora, uma compra por ativo.'),
-        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: () => INV.ir(ID, 'operar') }, 'Registrar uma compra'), h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, 'caixa') }, 'Registrar depósito')));
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: () => irRegistrar('', 'compra') }, 'Registrar uma compra'), h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, 'caixa') }, 'Registrar depósito')));
       return;
     }
+    const fac = modoFacil();
     const th = (t, c) => h('th', { scope: 'col', class: c || '' }, t);
     const thead = h('thead', null, h('tr', null,
-      th('Ticker', 'l'), th('Classe', 'l pb-hide-sm'), th('Qtd'), th('Preço médio', 'pb-hide-sm'), th('Custo', 'pb-hide-sm'),
-      th('Preço de referência'), th('Valor'), th('Resultado'), th('% atual'), th('Alvo %')));
+      th('Ticker', 'l'), fac ? null : th('Classe', 'l pb-hide-sm'), th('Qtd'), th(fac ? 'Preço médio pago' : 'Preço médio', fac ? '' : 'pb-hide-sm'), fac ? null : th('Custo', 'pb-hide-sm'),
+      th(fac ? 'Preço hoje' : 'Preço de referência'), th('Valor'), th('Resultado'), th('% atual'), th('Alvo %')));
     const tbody = h('tbody');
     rows.forEach((r) => {
-      const inp = h('input', { class: 'pb-in inv-cor-narrow', type: 'text', inputmode: 'decimal', value: pctIn(r.alvo), placeholder: '—', 'aria-label': 'Alvo percentual de ' + r.t });
-      inp.addEventListener('change', () => salvarAlvo(r.t, inp));
+      let inp;
+      if (fac) inp = h('span', null, r.alvo === null ? '—' : fmtN(r.alvo, 1) + '%');
+      else {
+        inp = h('input', { class: 'pb-in inv-cor-narrow', type: 'text', inputmode: 'decimal', value: pctIn(r.alvo), placeholder: '—', 'aria-label': 'Alvo percentual de ' + r.t });
+        inp.addEventListener('change', () => salvarAlvo(r.t, inp));
+      }
       const refCell = r.p
-        ? h('td', null, r.ref && r.ref.precoCent != null ? brl(r.ref.precoCent) + ' ' : '— ', chipEstado(r.ref))
+        ? h('td', null, r.ref && r.ref.precoCent != null ? brl(r.ref.precoCent) + ' ' : '— ', fac ? null : chipEstado(r.ref))
         : h('td', null, '—');
       tbody.appendChild(h('tr', null,
         h('td', { class: 'l' }, h('b', null, r.t), r.p ? '' : ' (sem posição)'),
-        h('td', { class: 'l pb-hide-sm' }, r.a ? r.a.classe : '—'),
+        fac ? null : h('td', { class: 'l pb-hide-sm' }, r.a ? r.a.classe : '—'),
         h('td', null, r.p ? fmtN(r.p.qtd, 0) : '0'),
-        h('td', { class: 'pb-hide-sm' }, r.p ? brl(r.p.precoMedioCent) : '—'),
-        h('td', { class: 'pb-hide-sm' }, r.p ? brl(r.p.custoCent) : '—'),
+        h('td', { class: fac ? '' : 'pb-hide-sm' }, r.p ? brl(r.p.precoMedioCent) : '—'),
+        fac ? null : h('td', { class: 'pb-hide-sm' }, r.p ? brl(r.p.custoCent) : '—'),
         refCell,
         h('td', null, r.valor === null ? '—' : brl(r.valor)),
         h('td', { class: cls(r.res) }, r.res === null ? '—' : brlS(r.res) + (r.resPct === null ? '' : ' (' + fmtS(r.resPct, 1) + '%)')),
@@ -448,7 +687,7 @@
     });
     const soma = Object.keys(alvos).reduce((s, k) => s + (Number(alvos[k]) || 0), 0);
     R.tabPos.replaceChildren(h('table', { class: 'pb-table', 'aria-label': 'Posições reais' }, thead, tbody),
-      h('p', { class: 'pb-note' + (soma > 100.0001 ? ' warn' : '') }, 'Soma dos alvos: ' + fmtN(soma, 1) + '%' + (soma > 100.0001 ? ' — acima de 100%.' : '.')));
+      fac && !Object.keys(alvos).length ? h('span') : h('p', { class: 'pb-note' + (soma > 100.0001 ? ' warn' : '') }, 'Soma dos alvos: ' + fmtN(soma, 1) + '%' + (soma > 100.0001 ? ' — acima de 100%.' : '.')));
   }
   function salvarAlvo(t, inp) {
     const txt = inp.value.trim();
@@ -780,16 +1019,17 @@
     delete R.tabTx.dataset.sujo;
     const efIds = new Set(d.ef.map((t) => t.id));
     const porId = {}; d.txs.forEach((t) => { porId[t.id] = t; });
-    let lista = S.todas ? d.txs.slice() : d.ef.slice();
+    const fac = modoFacil();
+    let lista = S.todas && !fac ? d.txs.slice() : d.ef.slice();
     const total = lista.length;
-    const q = R.txBusca.value.trim().toUpperCase(), tp = R.txTipo.value;
+    const q = fac ? '' : R.txBusca.value.trim().toUpperCase(), tp = fac ? '' : R.txTipo.value;
     if (q) lista = lista.filter((t) => ((t.ticker || '') + ' ' + (t.obs || '')).toUpperCase().includes(q));
     if (tp) lista = lista.filter((t) => t.tipo === tp);
     lista.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : ((a.criadoEm || '') < (b.criadoEm || '') ? 1 : -1)));
     R.txConta.textContent = total ? (lista.length === total ? total + ' transação(ões)' : lista.length + ' de ' + total + ' transação(ões)') : '';
     if (!total) {
-      R.tabTx.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma transação registrada ainda. Comece registrando o saldo da conta em "Caixa" e depois as compras em "Comprar ou vender".'),
-        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, 'caixa') }, 'Registrar depósito')));
+      R.tabTx.replaceChildren(h('p', { class: 'pb-note' }, 'Nenhuma transação registrada ainda.'),
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: () => irRegistrar('', 'compra') }, 'Registrar uma compra'), h('button', { type: 'button', class: 'pb-btn', onclick: () => INV.ir(ID, 'caixa') }, 'Registrar depósito')));
       return;
     }
     if (!lista.length) {
@@ -798,8 +1038,8 @@
       return;
     }
     const th = (t, c) => h('th', { scope: 'col', class: c || '' }, t);
-    const thead = h('thead', null, h('tr', null, th('Data', 'l'), th('Tipo', 'l'), th('Ticker', 'l'), th('Qtd'), th('Preço', 'pb-hide-sm'), th('Taxas', 'pb-hide-sm'), th('Total'),
-      th('Fonte', 'l pb-hide-sm'), th('Obs.', 'l pb-hide-sm'), th('Ações', 'l')));
+    const thead = h('thead', null, h('tr', null, th('Data', 'l'), th('Tipo', 'l'), th('Ticker', 'l'), th('Qtd'), th('Preço', fac ? '' : 'pb-hide-sm'), fac ? null : th('Taxas', 'pb-hide-sm'), th('Total'),
+      fac ? null : th('Fonte', 'l pb-hide-sm'), fac ? null : th('Obs.', 'l pb-hide-sm'), th('Ações', 'l')));
     const tbody = h('tbody');
     lista.forEach((t) => {
       const efetiva = efIds.has(t.id), subst = !efetiva && t.tipo !== 'cancelamento';
@@ -810,15 +1050,15 @@
       const acoes = h('td', { class: 'l' });
       if (efetiva && t.tipo !== 'cancelamento') {
         acoes.append(
-          h('button', { type: 'button', class: 'pb-btn', 'aria-label': 'Corrigir ' + descTx(t), onclick: () => (t.tipo === 'compra' || t.tipo === 'venda') ? carregarCorrecao(t) : carregarCorrecaoCaixa(t) }, 'Corrigir'), ' ',
-          h('button', { type: 'button', class: 'pb-btn', 'data-cancelar': t.id, 'aria-label': 'Anular ' + descTx(t), title: 'Tira a transação das contas (o registro original é mantido)', onclick: () => { S.cancelandoId = t.id; S.motivo = ''; renderTxs(dados()); const i = document.getElementById('cor-motivo'); if (i) i.focus(); } }, 'Anular'));
+          h('button', { type: 'button', class: 'pb-btn', 'aria-label': 'Corrigir ' + descTx(t), onclick: () => (t.tipo === 'compra' || t.tipo === 'venda') ? (modoFacil() ? carregarQ(t) : carregarCorrecao(t)) : carregarCorrecaoCaixa(t) }, 'Corrigir'), ' ',
+          h('button', { type: 'button', class: 'pb-btn', 'data-cancelar': t.id, 'aria-label': (fac ? 'Excluir ' : 'Anular ') + descTx(t), title: 'Tira a transação das contas (o registro original é mantido)', onclick: () => { S.cancelandoId = t.id; S.motivo = ''; renderTxs(dados()); const i = document.getElementById('cor-motivo') || R.tabTx.querySelector('[data-confirmar]'); if (i) i.focus(); } }, fac ? 'Excluir' : 'Anular'));
       }
       tbody.appendChild(h('tr', { class: subst ? 'inv-cor-riscada' : '' },
-        h('td', { class: 'l' }, fmtDH(t.data)), h('td', { class: 'l' }, TIPOS[t.tipo] || t.tipo), h('td', { class: 'l' }, t.ticker || '—'),
-        h('td', null, t.qtd ? fmtN(t.qtd, 0) : '—'), h('td', { class: 'pb-hide-sm' }, t.precoCent ? brl(t.precoCent) : '—'),
-        h('td', { class: 'pb-hide-sm' }, t.tipo === 'compra' || t.tipo === 'venda' ? brl(t.taxasCent) : '—'),
+        h('td', { class: 'l' }, fac ? fmtData(t.data) : fmtDH(t.data)), h('td', { class: 'l' }, TIPOS[t.tipo] || t.tipo), h('td', { class: 'l' }, t.ticker || '—'),
+        h('td', null, t.qtd ? fmtN(t.qtd, 0) : '—'), h('td', { class: fac ? '' : 'pb-hide-sm' }, t.precoCent ? brl(t.precoCent) : '—'),
+        fac ? null : h('td', { class: 'pb-hide-sm' }, t.tipo === 'compra' || t.tipo === 'venda' ? brl(t.taxasCent) : '—'),
         h('td', null, t.tipo === 'cancelamento' ? '—' : brl(t.valorCent)),
-        h('td', { class: 'l pb-hide-sm' }, FONTES[t.fontePreco] || '—'), h('td', { class: 'l pb-hide-sm' }, obs), acoes));
+        fac ? null : h('td', { class: 'l pb-hide-sm' }, FONTES[t.fontePreco] || '—'), fac ? null : h('td', { class: 'l pb-hide-sm' }, obs), acoes));
       if (S.cancelandoId === t.id && efetiva) {
         const mot = h('input', { class: 'pb-in', id: 'cor-motivo', type: 'text', value: S.motivo, maxlength: 200 });
         mot.addEventListener('input', () => { S.motivo = mot.value; });
@@ -835,18 +1075,18 @@
         };
         const conf = () => {
           if (S.cancelandoId !== t.id) return;   // linha já fechada (Esc, Voltar ou outro cancelamento)
-          if (!S.motivo.trim()) { err.textContent = 'Informe o motivo da anulação.'; err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); mot.focus(); return; }
-          try { INV.cancelarTx(t.id, S.motivo.trim()); }
+          if (!fac && !S.motivo.trim()) { err.textContent = 'Informe o motivo da anulação.'; err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); mot.focus(); return; }
+          try { INV.cancelarTx(t.id, S.motivo.trim() || 'Excluída pelo usuário'); }
           catch (e) { err.textContent = msgErro(e); err.hidden = false; mot.setAttribute('aria-invalid', 'true'); mot.setAttribute('aria-describedby', err.id); return; }
-          fechar('Anulada: ' + descTx(t) + '. Ela continua visível em "Mostrar também as versões corrigidas e as anulações".');
+          fechar(fac ? 'Excluída: ' + descTx(t) + '.' : 'Anulada: ' + descTx(t) + '. Ela continua visível em "Mostrar também as versões corrigidas e as anulações".');
         };
         mot.addEventListener('keydown', (ev) => {
           if (ev.key === 'Enter') { ev.preventDefault(); conf(); }
           else if (ev.key === 'Escape') { ev.preventDefault(); fechar(''); }
         });
         tbody.appendChild(h('tr', null, h('td', { class: 'l', colspan: 10 },
-          h('div', { class: 'inv-cor-row' }, h('label', { for: 'cor-motivo' }, 'Por que anular ' + descTx(t) + '?'), mot,
-            h('button', { type: 'button', class: 'pb-btn inv-perigo', onclick: conf }, 'Confirmar anulação'),
+          h('div', { class: 'inv-cor-row' }, fac ? h('span', null, 'Excluir ' + descTx(t) + '?') : [h('label', { for: 'cor-motivo' }, 'Por que anular ' + descTx(t) + '?'), mot],
+            h('button', { type: 'button', class: 'pb-btn inv-perigo', 'data-confirmar': '1', onclick: conf }, fac ? 'Sim, excluir' : 'Confirmar anulação'),
             h('button', { type: 'button', class: 'pb-btn', onclick: () => fechar('') }, 'Voltar')), err)));
       }
     });
@@ -887,7 +1127,7 @@
       } else {
         const bRem = S.removendo === a.ticker;
         li.append(
-          h('div', { class: 'inv-cor-row' }, h('b', null, a.ticker), h('span', null, a.nome), h('span', { class: 'pb-note' }, a.classe + ' · lote ' + (a.lote || 1) + ' · ' + (a.precoManualCent != null ? 'preço manual ' + brl(a.precoManualCent) : 'sem preço manual') + ' · ' + (u && u.temSerie ? 'com histórico na Simulação' : 'sem histórico (adicione em "extras")'))),
+          h('div', { class: 'inv-cor-row' }, h('b', null, a.ticker), h('span', null, a.nome), h('span', { class: 'pb-note' }, a.classe + (modoFacil() ? '' : ' · lote ' + (a.lote || 1)) + ' · ' + (a.precoManualCent != null ? 'preço manual ' + brl(a.precoManualCent) : 'sem preço manual') + (modoFacil() ? '' : ' · ' + (u && u.temSerie ? 'com histórico na Simulação' : 'sem histórico (adicione em "extras")')))),
           h('div', { class: 'inv-cor-row' },
             h('button', { type: 'button', class: 'pb-btn', 'aria-label': 'Editar ' + a.ticker, onclick: () => { S.editandoAtivo = a.ticker; S.removendo = null; renderAtivos(dados()); } }, 'Editar'),
             bRem ? [h('span', { class: 'pb-note' }, 'Remover ' + a.ticker + '?'),
@@ -926,7 +1166,7 @@
     let d;
     try { d = dados(); } catch (e) { R.tiles.replaceChildren(avisoEl('Não foi possível ler os dados da carteira: ' + msgErro(e), 'bad')); return; }
     D = d;
-    const passos = [() => renderArmazenamento(), () => atualizarLista(), () => renderResumo(d), () => renderPosicoes(d), () => renderGrafico(d), () => renderInfo(), () => sincronizar(), () => renderCaixa(d), () => renderTxs(d), () => renderAtivos(d)];
+    const passos = [() => renderArmazenamento(), () => atualizarLista(), () => desenharPassos(), () => renderResumo(d), () => renderPosicoes(d), () => renderGrafico(d), () => renderInfo(), () => sincronizar(), () => renderCaixa(d), () => renderTxs(d), () => renderAtivos(d)];
     passos.forEach((fn) => { try { fn(); } catch (e) { if (window.console) console.error('[corretora]', e); } });
   }
   let agendado = false;
