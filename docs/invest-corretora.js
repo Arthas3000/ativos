@@ -10,8 +10,8 @@
   const ID = 'corretora';
   const CLASSES = ['Ação', 'FII', 'ETF', 'BDR', 'Outro'];
   const TIPOS = { compra: 'Compra', venda: 'Venda', deposito: 'Depósito', retirada: 'Retirada', cancelamento: 'Anulação' };
-  const FONTES = { brapi: 'brapi.dev', fechamento: 'fechamento (Actions)', manual: 'manual' };
-  const ESTADOS = { 'ao-vivo': 'ao vivo', atrasado: 'atrasado', manual: 'manual', indisponivel: 'indisponível' };
+  const FONTES = { brapi: 'brapi.dev', fechamento: 'fechamento (Actions)', manual: 'manual', yahoo: 'Yahoo (do dia)' };
+  const ESTADOS = { 'ao-vivo': 'ao vivo', 'do-dia': 'do dia', atrasado: 'atrasado', manual: 'manual', indisponivel: 'indisponível' };
 
   /* ---------- utilidades ---------- */
   const h = (tag, attrs, ...kids) => {

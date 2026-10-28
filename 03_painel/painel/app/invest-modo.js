@@ -241,8 +241,10 @@
   // tela Hoje: a lista começa vazia e o usuário inclui um ativo por vez (para ver o preço ou planejar a compra)
   var cotLista = {}, cotPedida = {};
   var COT_TTL = 5 * 60 * 1000;   // preço de cada ativo da lista é renovado sozinho a cada 5 minutos com a tela aberta
+  var verCot = null;
   function cotacaoDe(t) {
-    var agora = Date.now();
+    var agora = Date.now(), v = INV.cotacoesInfo().gerado_em;
+    if (v !== verCot) { verCot = v; cotLista = {}; cotPedida = {}; }   // chegaram cotações novas: relê todos
     if (!cotPedida[t] || agora - cotPedida[t] > COT_TTL) {
       cotPedida[t] = agora;
       Promise.resolve(INV.cotacao(t)).then(function (c) { cotLista[t] = c; if (PB.current === 'resumo') desenharResumo(); }, function () { /* fica a referência */ });
@@ -288,8 +290,9 @@
   function linhaLista(t, a, info) {
     var cot = cotacaoDe(t), cod = INV.codigoNegociacao(t);
     var preco = cot && cot.precoCent ? C.fmtBRL(cot.precoCent) : 'sem preço';
-    var quando = !cot || !cot.precoCent ? (INV.token.ler() ? '' : ' · informe o token da brapi em Ajustes para ver o preço do dia')
-      : cot.estado === 'ao-vivo' ? ' · ao vivo' : cot.em ? ' · fechamento de ' + dt(String(cot.em).slice(0, 10)) : '';
+    var quando = !cot || !cot.precoCent ? ' · sem cotação para este código'
+      : cot.estado === 'ao-vivo' ? ' · ao vivo' : cot.estado === 'do-dia' ? ' · hoje às ' + String(cot.em).slice(11, 16)
+      : cot.fonte === 'yahoo' ? ' · último preço de ' + dt(String(cot.em).slice(0, 10)) : cot.em ? ' · fechamento de ' + dt(String(cot.em).slice(0, 10)) : '';
     var nome = a ? a.nome : info.nome !== t ? info.nome : '';
     var acoes = h('div', { class: 'inv-actions' },
       h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: function () { INV.planejarCompra(t); } }, 'Planejar compra'),
@@ -329,7 +332,13 @@
         h('span', null, 'Selic ', h('b', null, num(m('Selic meta'), 2) + '%')),
         h('span', null, 'Dólar ', h('b', null, 'R$ ' + num(m('Dólar comercial fechamento'), 2))),
         h('span', null, 'DI jan/31 ', h('b', null, num(m('DI jan/31'), 2) + '%'))),
-      h('p', { class: 'pb-note' }, 'Preços de ' + dt(p.data_ref) + ' (atualizados sozinhos depois de cada pregão).')));
+      h('p', { class: 'pb-note' }, (function () {
+        var ci = INV.cotacoesInfo();
+        var hojeIso = INV.ui.hoje();
+        var cot = ci.gerado_em ? (ci.gerado_em.slice(0, 10) === hojeIso ? 'Cotações de hoje às ' + ci.gerado_em.slice(11, 16) : 'Últimas cotações de ' + dt(ci.gerado_em.slice(0, 10)) + ' às ' + ci.gerado_em.slice(11, 16))
+          + ' (atraso de cerca de 15 min, renovadas sozinhas durante o pregão). ' : '';
+        return cot + 'Notas e indicadores com o fechamento de ' + dt(p.data_ref) + '.';
+      })())));
 
     // datalist da inclusão: ativos com nota primeiro, depois o catálogo de triagem
     if (!addLista.childNodes.length) {

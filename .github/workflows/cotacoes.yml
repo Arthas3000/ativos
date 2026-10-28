@@ -1,0 +1,43 @@
+# Cotações do dia para o app (sem token): último preço de cada ativo no Yahoo, com atraso de cerca de 15 minutos.
+# Roda a cada 15 minutos durante o pregão (10h às 17h50 de Brasília, segunda a sexta) e grava só docs/dados/cotacoes.json.
+# Os horários do GitHub podem atrasar alguns minutos em dias de muito uso. O fechamento completo continua no atualizar.yml.
+name: Cotações do dia
+
+on:
+  schedule:
+    - cron: "7,22,37,52 13-20 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cotacoes-do-dia
+  cancel-in-progress: true
+
+jobs:
+  cotacoes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Buscar cotações
+        run: python 03_painel/atualizar.py cotacoes
+      - name: Gravar no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/dados/cotacoes.json
+          git diff --cached --quiet && { echo "Cotações iguais às anteriores"; exit 0; }
+          git commit -q -m "Cotações do dia $(TZ=America/Sao_Paulo date +'%d/%m %H:%M')"
+          # outro workflow (atualização diária, adicionar ativo) pode ter gravado no meio: traz e tenta de novo
+          for i in 1 2 3 4; do
+            git pull -q --rebase origin "${{ github.event.repository.default_branch }}" && git push -q && exit 0
+            sleep $((i * 5))
+          done
+          exit 1

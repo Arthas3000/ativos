@@ -39,6 +39,7 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 | `03_painel/painel/app/` | Casca do app de celular (PWA): tokens de tema, camada `dash`, manifest, service worker, ícones. |
 | `docs/` | App gerado por `atualizar.py site`, publicado pelo GitHub Pages. Não editar à mão. |
 | `.github/workflows/atualizar.yml` | Atualização automática de segunda a sexta às 18h47 de Brasília (ou à mão no GitHub Actions): preços, fundamentos, histórico longo, score e app; snapshot só nas execuções manuais. |
+| `.github/workflows/cotacoes.yml` | Cotações do dia a cada 15 minutos durante o pregão (segunda a sexta, 10h às 17h50 de Brasília) em `docs/dados/cotacoes.json`. |
 | `.github/workflows/testes.yml` | Testes a cada push e pull request: `node --test` (cálculos) e `atualizar.py teste` (pipeline). |
 | `03_painel/dados_longos/` | `serie_longa.json` (5 anos diários, com dividendos) e `indices.json` (CDI e IPCA), gerados por `atualizar.py historico`. Não entram no snapshot. |
 | `03_painel/painel/app/invest*.js` | Módulo de investimentos do app: `invest.js` (cálculos), `invest-store.js` (dados, seções e Ajustes), `invest-sim.js` (Simulador), `invest-corretora.js` (Minha carteira), `invest-nav.js` (áreas do app e estilo), `invest-ajuda.js` (glossário e botões “?”), `invest-assistente.js` (Assistente de alocação), `invest-tour.js` (tour "Como usar"). |
@@ -69,7 +70,7 @@ Um botão de tema (claro/escuro, lembrado no aparelho; sem escolha, segue o sist
 
 Um código usado numa compra que não está no app (ex.: KLBN11) vira ativo próprio sozinho, com nome e classe do catálogo. A lista de acompanhamento fica no backup (`lista`).
 
-**Atualização automática.** O botão “Atualizar dados” saiu da barra: o workflow `atualizar.yml` roda sozinho de segunda a sexta às 18h47 de Brasília (e continua disponível à mão no GitHub Actions; a cópia em `historico/` só é feita nas execuções manuais). Com o token da brapi, os preços da lista e da carteira vêm do dia e se renovam a cada 5 minutos com a tela aberta.
+**Atualização automática.** O botão “Atualizar dados” saiu da barra: o workflow `atualizar.yml` roda sozinho de segunda a sexta às 18h47 de Brasília (e continua disponível à mão no GitHub Actions; a cópia em `historico/` só é feita nas execuções manuais). Durante o pregão, o workflow `cotacoes.yml` grava a cada 15 minutos o último preço de todos os ativos conhecidos (ranking, adicionados, catálogo) em `docs/dados/cotacoes.json` (Yahoo Finance, atraso de cerca de 15 min; `atualizar.py cotacoes`). O app relê esse arquivo a cada 5 minutos e o usa na lista, no planejamento e na carteira, sem precisar de token. Com o token da brapi, a cotação dela tem prioridade.
 
 Trocar de modo mantém aba, ativo escolhido, carteira, parâmetros e resultados; parâmetros escondidos no Fácil continuam valendo e aparecem como “premissas em uso”. Avisos e limitações nunca somem. Um link para tela só do Avançado abre nele.
 

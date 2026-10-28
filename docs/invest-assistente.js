@@ -165,7 +165,7 @@
     var r = refPreco(t);
     return { estado: r.estado || 'indisponivel', fonte: r.fonte || null, em: r.em || null };
   }
-  var ROTULO_ESTADO = { 'ao-vivo': 'ao vivo', atrasado: 'atrasado', manual: 'manual', indisponivel: 'indisponível' };
+  var ROTULO_ESTADO = { 'ao-vivo': 'ao vivo', 'do-dia': 'do dia', atrasado: 'atrasado', manual: 'manual', indisponivel: 'indisponível' };
   function chip(info) {
     var est = (info && info.estado) || 'indisponivel';
     var txt = ROTULO_ESTADO[est] || est;
@@ -757,7 +757,7 @@
       if (c.erros.some(function (x) { return x.indexOf('(aviso)') < 0; })) { erros.push(t + ': ' + c.erros.join(', ') + '.'); return; }
       var p = S.precos[t] || {}, info = precoInfo(t);
       var editou = e.preco !== reaisTxt(r.l.precoCent) || p.manual;
-      var fonte = editou ? 'manual' : (info.fonte === 'brapi' || info.fonte === 'fechamento' || info.fonte === 'manual' ? info.fonte : 'manual');
+      var fonte = editou ? 'manual' : (['brapi', 'fechamento', 'manual', 'yahoo'].indexOf(info.fonte) >= 0 ? info.fonte : 'manual');
       var total = c.bruto + c.taxas;
       var tx = { tipo: 'compra', ticker: t, data: agora, qtd: c.q, precoCent: c.p, taxasCent: c.taxas, valorCent: total, moeda: 'BRL',
         status: 'executada', fontePreco: fonte, obs: 'Assistente de alocação', substitui: null };

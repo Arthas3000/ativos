@@ -12,7 +12,7 @@
   const TKEY = 'pb-invest-token-brapi';
   const TIPOS = ['compra', 'venda', 'deposito', 'retirada', 'cancelamento'];
   const CLASSES = ['Ação', 'FII', 'ETF', 'BDR', 'Outro'];
-  const FONTES_PRECO = ['manual', 'brapi', 'fechamento'];
+  const FONTES_PRECO = ['manual', 'brapi', 'fechamento', 'yahoo'];
   const RE_DATA = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
   const RE_TICKER = /^[A-Z]{4}\d{1,2}$/;
   const LISTA_MAX = 100;
@@ -492,6 +492,23 @@
     });
     return carregando;
   }
+  // cotações do dia (docs/dados/cotacoes.json, gravado pelo workflow cotacoes.yml durante o pregão): renovadas sozinhas
+  let cotDia = null, cotBuscando = false;
+  function carregarCotacoes() {
+    if (cotBuscando) return;
+    cotBuscando = true;
+    buscar('cotacoes', (d) => isObj(d) && isObj(d.precos)).then((r) => {
+      cotBuscando = false;
+      if (r.status !== 'ok') return;
+      const mudou = !cotDia || cotDia.gerado_em !== r.data.gerado_em;
+      cotDia = r.data;
+      if (mudou) { uniCache = null; emit('mudou', { origem: 'cotacoes' }); }
+    });
+  }
+  setInterval(() => { if (document.visibilityState === 'visible') carregarCotacoes(); }, 5 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') carregarCotacoes(); });
+  const cotacoesInfo = () => (cotDia ? { gerado_em: cotDia.gerado_em, fonte: cotDia.fonte, n: Object.keys(cotDia.precos).length } : { gerado_em: null, fonte: null, n: 0 });
+
   const serie = () => Object.assign({}, fontes.serie);
   const indices = () => Object.assign({}, fontes.indices);
 
@@ -544,6 +561,13 @@
     if (r && Number.isFinite(r.preco_atual) && p.status === 'ok' && p.data && p.data[0]) {
       const dr = p.data[0].data_ref;
       if (typeof dr === 'string' && RE_DATA.test(dr) && (em === null || dr.slice(0, 10) > String(em).slice(0, 10))) { em = dr.slice(0, 10); valor = r.preco_atual; }
+    }
+    // 1b) cotação do dia (Yahoo, atraso de ~15 min), se for mais nova que o último fechamento
+    const q = cotDia && cotDia.precos[ticker];
+    if (q && q[0] > 0 && typeof q[1] === 'string' && (em === null || q[1].slice(0, 10) >= String(em).slice(0, 10))) {
+      const deHoje = q[1].slice(0, 10) === hoje();
+      return res(C().toCents(q[0]), q[1], 'yahoo', deHoje ? 'do-dia' : 'atrasado',
+        (deHoje ? 'Cotação de hoje às ' + q[1].slice(11, 16) : 'Último preço de ' + fmtDataHora(q[1])) + ' (Yahoo Finance, atraso de cerca de 15 minutos).');
     }
     const cent = valor === null ? null : C().toCents(valor);
     if (cent !== null && cent > 0 && em) {
@@ -732,7 +756,7 @@
       ROT_AVISO[tipo] ? el('strong', null, ROT_AVISO[tipo]) : null, texto);
   }
 
-  const ROT_ESTADO = { 'ao-vivo': 'ao vivo', atrasado: 'atrasado', manual: 'manual', indisponivel: 'indisponível' };
+  const ROT_ESTADO = { 'ao-vivo': 'ao vivo', 'do-dia': 'do dia', atrasado: 'atrasado', manual: 'manual', indisponivel: 'indisponível' };
   function estadoPreco(cot) {
     const e = cot && ROT_ESTADO[cot.estado] ? cot.estado : 'indisponivel';
     const partes = [ROT_ESTADO[e]];
@@ -835,7 +859,7 @@
 .inv-steps li{border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-xs) var(--cds-pad-sm);color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
 .inv-steps li[aria-current="step"]{color:var(--color-fg);background:var(--color-panel);border-color:var(--color-fg-muted);font-weight:var(--cds-font-weight-medium)}
 .inv-chip{display:inline-flex;align-items:center;padding:0 var(--cds-pad-sm);border:1px solid currentColor;border-radius:var(--cds-radius);font-size:var(--cds-font-size-caption);white-space:nowrap}
-.inv-chip-ao-vivo{color:var(--color-ok)}
+.inv-chip-ao-vivo,.inv-chip-do-dia{color:var(--color-ok)}
 .inv-chip-atrasado{color:var(--color-warn)}
 .inv-chip-manual{color:var(--c2)}
 .inv-chip-indisponivel{color:var(--color-bad)}
@@ -989,7 +1013,7 @@
   const INV = {
     estado: () => clone(estado), salvar, on, exportar, importar, apagarTudo,
     adicionarTx, adicionarTxs, corrigirTx, cancelarTx, ativoCustom, definirAlvo, lista, infoTicker, codigoNegociacao, garantirAtivo,
-    carregar, serie, indices, universo, ativo, cotacao,
+    carregar, serie, indices, universo, ativo, cotacao, cotacoesInfo, carregarCotacoes,
     precoReferencia: (t) => precoRef(t, ''), token, aba, aoMostrar, secoes, revelar, ir, preferencias: { ler: lerUi, gravar: gravarUi },
     armazenamento: () => ({ persistente: !memOnly, corrompido, copiaCorrompida: copiaCorrompida() !== null }),
     copiaCorrompida, baixarCopiaCorrompida, descartarCopiaCorrompida,
@@ -1044,7 +1068,7 @@
       else status(stToken, av('Token salvo, mas o teste falhou: ' + r.mensagem + extra, 'bad'));
     }
     const cardCot = card('Cotações (brapi.dev)',
-      el('p', { class: 'pb-note' }, 'Opcional. Com o token gratuito da brapi.dev, os preços da sua lista e da carteira vêm do dia e se renovam sozinhos. Sem token, vale o último fechamento (atualizado sozinho depois de cada pregão).'),
+      el('p', { class: 'pb-note' }, 'Opcional. Sem token, o app já mostra o preço do dia pelo Yahoo Finance, renovado sozinho a cada 15 minutos durante o pregão (atraso de cerca de 15 min). Com o token gratuito da brapi.dev, o preço fica mais próximo do tempo real, conforme o seu plano.'),
       el('ol', { class: 'inv-steps-list' },
         el('li', null, 'Acesse ', el('a', { href: 'https://brapi.dev', target: '_blank', rel: 'noopener noreferrer' }, 'https://brapi.dev'), ' e crie uma conta gratuita.'),
         el('li', null, 'No painel da conta, abra a área de tokens/API e copie o seu token.'),
@@ -1264,7 +1288,9 @@
       const dref = p.status === 'ok' && p.data[0] ? fmtData(p.data[0].data_ref) : '—';
       const resumo = el('dl', { class: 'inv-kv', 'data-so-facil': '1' },
         el('dt', null, 'Preços e notas'), el('dd', null, 'fechamento de ' + dref + ' (Yahoo Finance e Fundamentus), atualizados sozinhos depois de cada pregão'),
-        el('dt', null, 'Preço do dia'), el('dd', null, token.ler() ? 'brapi.dev, com o seu token' : 'sem token: vale o último fechamento'),
+        el('dt', null, 'Preço do dia'), el('dd', null, (token.ler() ? 'brapi.dev, com o seu token; sem resposta dela, ' : '') + (cotDia
+          ? 'Yahoo Finance a cada 15 min durante o pregão (última: ' + fmtDataHora(cotDia.gerado_em) + ', atraso de cerca de 15 min)'
+          : 'Yahoo Finance a cada 15 min durante o pregão (ainda sem cotação nesta sessão)')),
         el('dt', null, 'Histórico de 5 anos'), el('dd', null, s.status === 'ok' ? 'carregado' : s.status === 'carregando' ? 'carregando…' : 'indisponível'));
       const det = el('div', { 'data-so-avancado': '1', style: 'display:grid;gap:var(--cds-gap-sm)' },
         blocoFonte('Histórico longo (serie_longa.json)', s, ls),
@@ -1301,4 +1327,5 @@
 
   montarConfig();
   carregar();
+  carregarCotacoes();
 })();
