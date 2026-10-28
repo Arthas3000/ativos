@@ -15,6 +15,7 @@
   const FONTES_PRECO = ['manual', 'brapi', 'fechamento'];
   const RE_DATA = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
   const RE_TICKER = /^[A-Z]{4}\d{1,2}$/;
+  const LISTA_MAX = 100;
   const C = () => W.INVCalc;
 
   const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -32,7 +33,7 @@
   };
 
   const padrao = () => ({
-    schema: 1, ativosCustom: [], transacoes: [], alvos: {},
+    schema: 1, ativosCustom: [], transacoes: [], alvos: {}, lista: [],
     config: { taxaFixaCent: 0, taxaPct: 0, intensidadeScore: 0.3, lotePadrao: 1 }, rascunhos: {}
   });
 
@@ -125,6 +126,11 @@
         if (!RE_TICKER.test(k)) throw new Error('Alvo com ticker inválido: ' + k + '.');
         s.alvos[k] = num(raw.alvos[k], 'Alvo de ' + k, { min: 0, max: 100 });
       });
+    }
+    if (raw.lista !== undefined) {
+      // Lista de acompanhamento (tela Hoje): só códigos válidos, sem repetição; o que não serve é descartado sem bloquear.
+      if (!Array.isArray(raw.lista)) { if (estrito && avisos) avisos.push('A lista de ativos acompanhados estava num formato inválido e foi descartada.'); }
+      else raw.lista.forEach((t) => { if (typeof t === 'string' && RE_TICKER.test(t) && !s.lista.includes(t) && s.lista.length < LISTA_MAX) s.lista.push(t); });
     }
     if (raw.rascunhos !== undefined) {
       // Rascunhos são só conveniência: o que estiver malformado é descartado (com aviso na importação), nunca bloqueia.
@@ -414,6 +420,50 @@
     salvar((s) => { if (pct === null || pct === undefined) delete s.alvos[ticker]; else s.alvos[ticker] = pct; });
   }
 
+  // ---------------------------------------------------------------- lista de acompanhamento (tela Hoje do modo Fácil)
+  // Começa vazia: o usuário inclui um ativo por vez, quando quer ver o preço ou comprar.
+  const lista = {
+    ler: () => estado.lista.slice(),
+    adicionar(texto) {
+      const v = C().validarTicker(String(texto || ''));
+      if (!v || !v.ok) throw new Error((v && v.erro) || 'Código inválido. Use o formato PETR4 ou HGLG11.');
+      if (!RE_TICKER.test(v.ticker)) throw new Error('Código fora do formato aceito (4 letras e 1 ou 2 números, ex.: PETR4).');
+      atualizarDoStorage();
+      if (estado.lista.includes(v.ticker)) return { ticker: v.ticker, novo: false };
+      if (estado.lista.length >= LISTA_MAX) throw new Error('A lista chegou ao limite de ' + LISTA_MAX + ' ativos. Remova algum antes.');
+      salvar((s) => { s.lista.push(v.ticker); });
+      return { ticker: v.ticker, novo: true };
+    },
+    remover(ticker) { salvar((s) => { s.lista = s.lista.filter((t) => t !== ticker); }); },
+    limpar() { salvar((s) => { s.lista = []; }); }
+  };
+
+  // nome e classe de um código: dados do painel, ativo próprio ou catálogo de triagem (carregado em segundo plano)
+  let catalogo = null;
+  function infoTicker(ticker) {
+    const t = String(ticker || '').toUpperCase();
+    const p = (W.dash.data('ativos').data || []).find((r) => r.ticker === t);
+    if (p) return { ticker: t, nome: p.nome, classe: p.classe, conhecido: true };
+    const cu = estado.ativosCustom.find((x) => x.ticker === t);
+    if (cu) return { ticker: t, nome: cu.nome, classe: cu.classe, conhecido: true };
+    const c = (catalogo || []).find((x) => x.ticker === t);
+    if (c) return { ticker: t, nome: c.nome, classe: CLASSES.includes(c.classe) ? c.classe : 'Outro', conhecido: true };
+    const u = universo().find((x) => x.ticker === t);
+    if (u) return { ticker: t, nome: u.nome, classe: u.classe, conhecido: true };
+    // sem cadastro: final 11 costuma ser FII (ou unit); 3 a 8, ação
+    return { ticker: t, nome: t, classe: /11$/.test(t) ? 'FII' : 'Ação', conhecido: false };
+  }
+  // código para negociar: ações no mercado fracionário levam o F no fim (PETR4F); FII, ETF e BDR não têm fracionário
+  const codigoNegociacao = (ticker) => (infoTicker(ticker).classe === 'Ação' ? ticker + 'F' : ticker);
+  // garante que o ativo exista no app (para registrar compra de um código fora do painel); devolve o ticker
+  function garantirAtivo(ticker) {
+    const t = String(ticker || '').toUpperCase();
+    if (ativo(t)) return t;
+    const i = infoTicker(t);
+    ativoCustom.adicionar({ ticker: t, nome: i.nome, classe: i.classe, lote: 1 });
+    return t;
+  }
+
   // ---------------------------------------------------------------- dados do Actions
   const fontes = {
     serie: { status: 'carregando', data: null, mensagem: '' },
@@ -433,9 +483,11 @@
     fontes.indices = { status: 'carregando', data: null, mensagem: '' };
     carregando = Promise.all([
       buscar('serie_longa', (d) => isObj(d) && isObj(d.ativos)),
-      buscar('indices', (d) => isObj(d))
-    ]).then(([s, i]) => {
+      buscar('indices', (d) => isObj(d)),
+      catalogo ? null : buscar('catalogo', (d) => Array.isArray(d))
+    ]).then(([s, i, c]) => {
       fontes.serie = s; fontes.indices = i; carregando = null;
+      if (c && c.status === 'ok') catalogo = c.data;
       emit('mudou', { origem: 'carregar' });
     });
     return carregando;
@@ -936,7 +988,7 @@
   // ---------------------------------------------------------------- API pública
   const INV = {
     estado: () => clone(estado), salvar, on, exportar, importar, apagarTudo,
-    adicionarTx, adicionarTxs, corrigirTx, cancelarTx, ativoCustom, definirAlvo,
+    adicionarTx, adicionarTxs, corrigirTx, cancelarTx, ativoCustom, definirAlvo, lista, infoTicker, codigoNegociacao, garantirAtivo,
     carregar, serie, indices, universo, ativo, cotacao,
     precoReferencia: (t) => precoRef(t, ''), token, aba, aoMostrar, secoes, revelar, ir, preferencias: { ler: lerUi, gravar: gravarUi },
     armazenamento: () => ({ persistente: !memOnly, corrompido, copiaCorrompida: copiaCorrompida() !== null }),
@@ -992,7 +1044,7 @@
       else status(stToken, av('Token salvo, mas o teste falhou: ' + r.mensagem + extra, 'bad'));
     }
     const cardCot = card('Cotações (brapi.dev)',
-      el('p', { class: 'pb-note' }, 'Para ver o preço do dia (com o atraso do seu plano) em vez do último fechamento, informe o seu token gratuito da brapi.dev. Sem token, o app mostra o último fechamento salvo pelo GitHub Actions, marcado como "atrasado". Você sempre pode digitar um preço manualmente.'),
+      el('p', { class: 'pb-note' }, 'Opcional. Com o token gratuito da brapi.dev, os preços da sua lista e da carteira vêm do dia e se renovam sozinhos. Sem token, vale o último fechamento (atualizado sozinho depois de cada pregão).'),
       el('ol', { class: 'inv-steps-list' },
         el('li', null, 'Acesse ', el('a', { href: 'https://brapi.dev', target: '_blank', rel: 'noopener noreferrer' }, 'https://brapi.dev'), ' e crie uma conta gratuita.'),
         el('li', null, 'No painel da conta, abra a área de tokens/API e copie o seu token.'),
@@ -1017,6 +1069,9 @@
     // mostra o valor do controle deslizante e o efeito em palavras
     const saidaIntens = el('output', { for: 'inv-cfg-intens', class: 'inv-range-val', 'aria-live': 'polite' });
     cf.intens.input.after(saidaIntens);
+    // no Fácil ficam só as taxas: a compra é sempre no fracionário (lote 1) e o score não entra no planejamento simples
+    cf.lote.setAttribute('data-so-avancado', '1');
+    cf.intens.setAttribute('data-so-avancado', '1');
     function mostrarIntens() {
       const v = Number(cf.intens.input.value);
       saidaIntens.textContent = v + '% — ' + (v === 0 ? 'não usa o score' : v <= 30 ? 'efeito suave' : v <= 70 ? 'efeito moderado' : 'efeito forte');
@@ -1060,7 +1115,7 @@
       } catch (e) { status(stCustos, av(e.message, 'bad')); }
     }
     const cardCustos = card('Custos padrão',
-      el('p', { class: 'pb-note' }, 'Pontos de partida para as estimativas de compra e o planejamento de aporte. Você pode mudar os valores em cada operação.'),
+      el('p', { class: 'pb-note' }, 'Usados no planejamento de compra. Se a sua corretora não cobra corretagem, deixe 0.'),
       el('div', { class: 'inv-form' }, cf.taxaFixa, cf.taxaPct, cf.lote, cf.intens),
       el('div', { class: 'inv-actions' }, el('button', { type: 'button', class: 'pb-btn inv-pri', onclick: salvarCustos }, 'Salvar custos')),
       stCustos);
@@ -1084,6 +1139,7 @@
       const lista = estado.ativosCustom.map((a) => a.ticker);
       const trecho = '"extras": [' + (lista.length ? lista : ['TICK1', 'TICK2']).map((t) => '"' + t + '"').join(', ') + ']';
       const u = (t) => ativo(t);
+      const av2 = (n) => { n.setAttribute('data-so-avancado', '1'); return n; };
       corpoExtras.replaceChildren(
         lista.length
           ? INV.ui.tabela([
@@ -1093,15 +1149,16 @@
             { rotulo: 'Histórico longo', alinhar: 'l', render: (a) => (u(a.ticker) && u(a.ticker).temSerie ? 'já tem série' : 'ainda sem série') }
           ], estado.ativosCustom, { legenda: 'Ativos personalizados e situação do histórico' })
           : el('p', { class: 'pb-note' }, 'Você ainda não cadastrou ativos próprios. Eles são cadastrados em Minha carteira › Meus ativos.'),
-        el('p', { class: 'pb-note' }, lista.length
+        el('p', { class: 'pb-note', 'data-so-facil': '1' }, 'Para ter nota e histórico de um ativo novo, use Mercado › Adicionar ativo.'),
+        av2(el('p', { class: 'pb-note' }, lista.length
           ? 'Para que o Simulador tenha histórico desses ativos, o ticker precisa estar na lista "extras" do arquivo 03_painel/config.json. Junte o trecho abaixo aos tickers que já estiverem lá:'
-          : 'Exemplo do trecho que vai no arquivo 03_painel/config.json (troque pelos seus tickers):'),
-        el('pre', { class: 'inv-code', tabindex: '0', 'aria-label': 'Trecho para o config.json' }, trecho),
-        el('div', { class: 'inv-actions' },
+          : 'Exemplo do trecho que vai no arquivo 03_painel/config.json (troque pelos seus tickers):')),
+        av2(el('pre', { class: 'inv-code', tabindex: '0', 'aria-label': 'Trecho para o config.json' }, trecho)),
+        av2(el('div', { class: 'inv-actions' },
           el('button', { type: 'button', class: 'pb-btn', onclick: () => copiar(trecho) }, 'Copiar trecho'),
-          el('a', { class: 'pb-btn', href: 'https://github.com/Arthas3000/ativos/edit/main/03_painel/config.json', target: '_blank', rel: 'noopener noreferrer' }, 'Editar config.json no GitHub')),
+          el('a', { class: 'pb-btn', href: 'https://github.com/Arthas3000/ativos/edit/main/03_painel/config.json', target: '_blank', rel: 'noopener noreferrer' }, 'Editar config.json no GitHub'))),
         stCopiar,
-        el('p', { class: 'pb-note' }, 'Depois de salvar a alteração no GitHub, o histórico desses ativos chega na próxima execução de "Atualizar dados" (GitHub Actions). Até lá a Simulação não os enxerga; a Corretora e o Assistente já funcionam.'));
+        el('p', { class: 'pb-note', 'data-so-avancado': '1' }, 'Depois de salvar a alteração no GitHub, o histórico desses ativos chega na próxima atualização automática (GitHub Actions, depois de cada pregão). Até lá a Simulação não os enxerga; a Corretora e o Assistente já funcionam.'));
     }
     const cardExtras = card('Ativos extras no histórico', corpoExtras);
 
@@ -1185,7 +1242,7 @@
     }
     function blocoFonte(titulo, f, linhas) {
       if (f.status === 'carregando') return el('div', null, el('h3', null, titulo), av('Carregando…', 'info'));
-      if (f.status !== 'ok') return el('div', null, el('h3', null, titulo), av('Histórico longo indisponível (' + f.mensagem + '). Ele é gerado pelo botão "Atualizar dados" (GitHub Actions); o resto do app continua funcionando.', 'warn'));
+      if (f.status !== 'ok') return el('div', null, el('h3', null, titulo), av('Histórico longo indisponível (' + f.mensagem + '). Ele é gerado pela atualização automática (GitHub Actions); o resto do app continua funcionando.', 'warn'));
       return el('div', { style: 'display:grid;gap:var(--cds-gap-xs)' }, el('h3', null, titulo),
         el('dl', { class: 'inv-kv' }, linhas.map(([k, v]) => [el('dt', null, k), el('dd', null, v)])));
     }
@@ -1203,9 +1260,16 @@
         return [['Gerado em', fmtDataHora(d.gerado_em)], ['CDI (SGS 12)', cd], ['IPCA (SGS 433)', ip],
           ['Fonte', d.fonte || '—'], ['Falhas', falhasTxt(d.falhas)]];
       })() : [];
-      corpoFontes.replaceChildren(
+      const p = W.dash.data('parametros');
+      const dref = p.status === 'ok' && p.data[0] ? fmtData(p.data[0].data_ref) : '—';
+      const resumo = el('dl', { class: 'inv-kv', 'data-so-facil': '1' },
+        el('dt', null, 'Preços e notas'), el('dd', null, 'fechamento de ' + dref + ' (Yahoo Finance e Fundamentus), atualizados sozinhos depois de cada pregão'),
+        el('dt', null, 'Preço do dia'), el('dd', null, token.ler() ? 'brapi.dev, com o seu token' : 'sem token: vale o último fechamento'),
+        el('dt', null, 'Histórico de 5 anos'), el('dd', null, s.status === 'ok' ? 'carregado' : s.status === 'carregando' ? 'carregando…' : 'indisponível'));
+      const det = el('div', { 'data-so-avancado': '1', style: 'display:grid;gap:var(--cds-gap-sm)' },
         blocoFonte('Histórico longo (serie_longa.json)', s, ls),
-        blocoFonte('Índices (indices.json)', i, li),
+        blocoFonte('Índices (indices.json)', i, li));
+      corpoFontes.replaceChildren(resumo, det,
         el('div', { class: 'inv-actions' }, el('button', { type: 'button', class: 'pb-btn', onclick: () => { carregar(); } }, 'Recarregar dados')));
     }
     const cardFontes = card('Fontes de dados', corpoFontes);
@@ -1216,16 +1280,11 @@
       id: 'config', rotulo: 'Seções dos ajustes',
       antes: [avisoArm],
       itens: [
-        { id: 'cotacoes', rotulo: 'Cotações', nodes: [cardCot],
-          intro: 'Opcional. Sem token, o app usa o último fechamento baixado pelo GitHub Actions e avisa que não é cotação ao vivo.' },
-        { id: 'custos', rotulo: 'Custos e lotes', nodes: [cardCustos],
-          intro: 'Valores padrão usados nas estimativas de compra e no planejamento de aportes. Você ainda pode editar cada operação.' },
-        { id: 'extras', rotulo: 'Ativos extras', nodes: [cardExtras],
-          intro: 'Para um ativo seu ter histórico no Simulador, ele precisa entrar na lista "extras" do repositório.' },
-        { id: 'backup', rotulo: 'Backup', nodes: [cardBackup],
-          intro: 'Seus registros ficam só neste navegador. Exporte uma cópia de vez em quando.' },
-        { id: 'fontes', rotulo: 'Fontes de dados', nodes: [cardFontes],
-          intro: 'De onde vêm os números e quando foram atualizados pela última vez.' }
+        { id: 'cotacoes', rotulo: 'Cotações', nodes: [cardCot] },
+        { id: 'custos', rotulo: 'Custos', nodes: [cardCustos] },
+        { id: 'extras', rotulo: 'Ativos extras', nodes: [cardExtras] },
+        { id: 'backup', rotulo: 'Backup', nodes: [cardBackup] },
+        { id: 'fontes', rotulo: 'Fontes de dados', nodes: [cardFontes] }
       ]
     });
 

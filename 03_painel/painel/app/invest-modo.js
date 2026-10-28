@@ -18,7 +18,7 @@
   var TABS_AV = ['geral', 'ranking', 'valor', 'precos', 'catalogo', 'macro', 'historico', 'metodo'];
   var TABS_FACIL = ['resumo'];
   // seções escondidas no Fácil: nada some dos dados, só da navegação
-  var SECOES_AV = { corretora: ['ativos'], config: ['custos', 'extras', 'fontes'] };
+  var SECOES_AV = {};
 
   function h(tag, attrs) {
     var n = document.createElement(tag);
@@ -238,88 +238,166 @@
   }
   var ATENCAO = ['armadilha', 'risco-rendimento', 'oportunidade-com-risco'];
 
+  // tela Hoje: a lista começa vazia e o usuário inclui um ativo por vez (para ver o preço ou planejar a compra)
+  var cotLista = {}, cotPedida = {};
+  var COT_TTL = 5 * 60 * 1000;   // preço de cada ativo da lista é renovado sozinho a cada 5 minutos com a tela aberta
+  function cotacaoDe(t) {
+    var agora = Date.now();
+    if (!cotPedida[t] || agora - cotPedida[t] > COT_TTL) {
+      cotPedida[t] = agora;
+      Promise.resolve(INV.cotacao(t)).then(function (c) { cotLista[t] = c; if (PB.current === 'resumo') desenharResumo(); }, function () { /* fica a referência */ });
+    }
+    if (cotLista[t]) return cotLista[t];
+    try { return INV.precoReferencia(t); } catch (e) { return null; }
+  }
+  setInterval(function () { if (PB.current === 'resumo' && document.visibilityState === 'visible' && INV.token.ler()) desenharResumo(); }, COT_TTL);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && PB.current === 'resumo') desenharResumo(); });
+
+  var addMsg = h('div', { id: 'hoje-add-msg', role: 'status', 'aria-live': 'polite' });
+  var addInput = h('input', { type: 'text', class: 'pb-in', id: 'hoje-add', placeholder: 'Código, ex.: PETR4', autocomplete: 'off', autocapitalize: 'characters', spellcheck: 'false', 'aria-describedby': 'hoje-add-msg', list: 'hoje-add-lista' });
+  var addLista = h('datalist', { id: 'hoje-add-lista' });
+  var addForm = h('form', { class: 'pb-controls', novalidate: true },
+    h('label', { class: 'inv-sr', for: 'hoje-add' }, 'Código do ativo para incluir na lista'), addInput, addLista, h('button', { type: 'submit', class: 'pb-btn inv-pri' }, 'Incluir'));
+  addForm.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var txt = addInput.value.trim().toUpperCase().split(/[\s—–]+/)[0];
+    try {
+      var r = INV.lista.adicionar(txt);
+      addInput.value = ''; addInput.removeAttribute('aria-invalid');
+      addMsg.replaceChildren(h('p', { class: 'pb-note pos' }, r.novo ? r.ticker + ' incluído na lista.' : r.ticker + ' já estava na lista.'));
+    } catch (e) {
+      addInput.setAttribute('aria-invalid', 'true');
+      addMsg.replaceChildren(h('p', { class: 'pb-note warn' }, e.message));
+    }
+    addInput.focus();
+  });
+  var boxFaixa = h('div'), boxLista = h('div'), boxDest = h('div'), boxCart = h('div', { class: 'pb-card', id: 'resumo-carteira' });
+  var confirmarLimpar = false;
+  var cLista = h('div', { class: 'pb-card' },
+    h('h2', null, 'Minha lista'),
+    h('p', { class: 'pb-note' }, 'Inclua os ativos que você quer acompanhar ou comprar, um por vez.'),
+    addForm, addMsg, boxLista);
+  var cMais = h('div', { class: 'pb-card' },
+    h('h2', null, 'Quer ir mais fundo?'),
+    h('div', { class: 'inv-actions' },
+      h('button', { type: 'button', class: 'pb-btn', onclick: function () { irAvancado('geral'); } }, 'Abrir a análise completa'),
+      h('button', { type: 'button', class: 'pb-btn', onclick: function () { irAvancado('metodo'); } }, 'Como a nota é calculada')),
+    h('p', { class: 'pb-disc' }, 'Material educacional; não é recomendação de investimento. Os dados dependem das fontes e da data da coleta.'));
+  var montado = false;
+
+  function linhaLista(t, a, info) {
+    var cot = cotacaoDe(t), cod = INV.codigoNegociacao(t);
+    var preco = cot && cot.precoCent ? C.fmtBRL(cot.precoCent) : 'sem preço';
+    var quando = !cot || !cot.precoCent ? (INV.token.ler() ? '' : ' · informe o token da brapi em Ajustes para ver o preço do dia')
+      : cot.estado === 'ao-vivo' ? ' · ao vivo' : cot.em ? ' · fechamento de ' + dt(String(cot.em).slice(0, 10)) : '';
+    var nome = a ? a.nome : info.nome !== t ? info.nome : '';
+    var acoes = h('div', { class: 'inv-actions' },
+      h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: function () { INV.planejarCompra(t); } }, 'Planejar compra'),
+      h('button', { type: 'button', class: 'pb-btn', onclick: function () { INV.registrarOperacao(t, 'compra'); } }, 'Registrar compra'),
+      a ? h('button', { type: 'button', class: 'pb-btn', onclick: function () { PB.openAtivo(t); } }, 'Ficha') : h('button', { type: 'button', class: 'pb-btn', title: 'Pede ao GitHub a nota automática deste ativo', onclick: function () {
+        PB.show('adicionar');
+        setTimeout(function () { var i = document.getElementById('add-ticker'); if (i) { i.value = t; i.focus(); } }, 0);
+      } }, 'Pedir nota'),
+      h('button', { type: 'button', class: 'pb-btn', 'aria-label': 'Tirar ' + t + ' da lista', onclick: function () { INV.lista.remover(t); } }, 'Tirar'));
+    return h('li', null,
+      h('div', { class: 'l' }, h('b', null, t), cod !== t ? h('span', { class: 'm' }, 'compra como ' + cod) : null, nome ? h('span', { class: 'm' }, nome) : null,
+        a ? h('span', { class: 'inv-chip nd', style: 'color:' + corInd(a.sinal) }, indicacao(a.sinal)) : h('span', { class: 'inv-chip nd' }, 'Sem nota')),
+      h('div', null, a ? h('span', null, 'Nota ', h('b', null, num(a.score / 100, 1)), ' · ') : null, h('span', null, 'Preço ', h('b', null, preco)), h('span', { class: 'm' }, quando)),
+      a && a.risco ? h('div', { class: 'm' }, 'Risco: ' + a.risco) : null,
+      acoes);
+  }
+
   function desenharResumo() {
     var ativos = dash.data('ativos'), macro = dash.data('macro'), par = dash.data('parametros');
     var ok = ativos.status === 'ok' && macro.status === 'ok' && par.status === 'ok';
     if (!ok) {
+      montado = false;
       var falhou = [ativos, macro, par].some(function (x) { return x.status === 'error'; });
       pagina.replaceChildren(h('div', { class: 'pb-card', 'aria-live': 'polite' }, h('p', { class: 'pb-note' }, falhou ? 'Não foi possível carregar os dados do mercado. Verifique a conexão e tente de novo.' : 'Carregando os dados…')));
       return;
     }
-    var p = par.data[0], A = ativos.data;
+    // os cartões ficam no lugar entre um desenho e outro: digitar na lista não perde o foco quando um preço chega
+    if (!montado) { pagina.replaceChildren(boxFaixa, cLista, boxDest, boxCart, cMais); montado = true; }
+    var p = par.data[0], A = ativos.data, porTicker = {};
+    A.forEach(function (a) { porTicker[a.ticker] = a; });
     var m = function (ind) { var r = macro.data.filter(function (x) { return x.indicador === ind; })[0]; return r && typeof r.valor_num === 'number' ? r.valor_num : null; };
-    var mg = dash.data('margem_positiva'), sn = dash.data('sinais');
-    var nMs = mg.status === 'ok' ? mg.data[0].n : null, tkMs = mg.status === 'ok' ? mg.data[0].tickers : '';
 
-    var faixa = h('div', { class: 'pb-card' },
+    boxFaixa.replaceChildren(h('div', { class: 'pb-card' },
       h('h2', null, 'Cenário em 4 números'),
       h('div', { class: 'inv-faixa' },
         h('span', null, 'Ibovespa no estresse ', h('b', { class: PB.cls(m('Ibovespa variação')) }, PB.sig(m('Ibovespa variação'), 2) + '%')),
         h('span', null, 'Selic ', h('b', null, num(m('Selic meta'), 2) + '%')),
         h('span', null, 'Dólar ', h('b', null, 'R$ ' + num(m('Dólar comercial fechamento'), 2))),
         h('span', null, 'DI jan/31 ', h('b', null, num(m('DI jan/31'), 2) + '%'))),
-      h('p', { class: 'pb-note' }, (nMs === null ? 'Dados de valor justo indisponíveis. ' : 'Com custo de capital de ' + num(p.ke, 1) + '%, só ' + nMs + (nMs === 1 ? ' ação está' : ' ações estão') + ' abaixo do valor justo' + (tkMs ? ' (' + tkMs + ')' : '') + '. ') +
-        'Versão ' + p.versao + ' · preços de ' + dt(p.data_ref) + ' · ' + p.evento + '.'));
+      h('p', { class: 'pb-note' }, 'Preços de ' + dt(p.data_ref) + ' (atualizados sozinhos depois de cada pregão).')));
 
-    // tabela principal: nota, indicação e o risco de cada ativo, ordenados pela nota
-    var filtrados = A.slice().sort(PB.byPos).filter(function (a) {
-      return (!filtroFacil.classe || a.classe === filtroFacil.classe) && (!filtroFacil.soCompra || CANDIDATAS.indexOf(a.sinal) >= 0);
-    });
-    var chips = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Filtrar a tabela' });
-    [['', 'Todos'], ['Ação', 'Ações'], ['FII', 'FIIs']].forEach(function (c) {
-      chips.append(h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': String(filtroFacil.classe === c[0]), onclick: function () { filtroFacil.classe = c[0]; desenharResumo(); } }, c[1]));
-    });
-    chips.append(h('label', { class: 'inv-sim-opt', style: 'display:inline-flex;gap:.4rem;align-items:center' },
-      h('input', { type: 'checkbox', checked: filtroFacil.soCompra, onchange: function (e) { filtroFacil.soCompra = e.target.checked; desenharResumo(); } }),
-      h('span', null, 'Só candidatas à compra')));
-    var linhasT = filtrados.map(function (a) {
-      var cor = corInd(a.sinal), corTxt = cor;
-      return h('tr', null,
-        h('td', { class: 'l' },
-          h('button', { type: 'button', class: 'inv-link', onclick: function () { PB.openAtivo(a.ticker); }, 'aria-label': 'Abrir ficha de ' + a.ticker }, a.ticker), ' ', h('span', { class: 'm' }, a.nome),
-          h('div', { class: 'inv-ind-sm' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt }, indicacao(a.sinal))),
-          h('div', { class: 'm' }, 'Risco: ' + (a.risco || '—'))),
-        h('td', null, h('b', null, num(a.score / 100, 1), a.posicao ? '' : '*'), h('span', { class: 'pb-bar', style: 'width:' + (a.score / 1000 * 3) + 'rem;background:' + cor, 'aria-hidden': 'true' })),
-        h('td', { class: 'l pb-hide-sm' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt, title: (INDICACAO[a.sinal] || [])[1] || '' }, indicacao(a.sinal))),
-        h('td', { class: 'pb-hide-sm' }, 'R$ ' + num(a.preco_atual, 2)));
-    });
-    var cTab = h('div', { class: 'pb-card' },
-      h('h2', null, 'Notas e indicação'),
-      h('p', { class: 'pb-note' }, 'Nota de 0 a 10 (o score de 0 a 1000 dividido por 100). Os 20 do ranking vêm do mais bem avaliado para o menos; os ativos adicionados por você (*) vêm depois, com nota automática. Toque no código para ver a ficha.'),
-      chips,
-      h('p', { class: 'pb-note', role: 'status', 'aria-live': 'polite' }, filtrados.length + ' de ' + A.length + ' ativos'),
-      filtrados.length ? h('div', { class: 'pb-tablewrap' }, h('table', { class: 'pb-table inv-ez' }, h('caption', { class: 'inv-sr' }, 'Notas e indicação dos ativos'),
-        h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'l' }, 'Ativo e risco'), h('th', { scope: 'col' }, 'Nota'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Indicação'), h('th', { scope: 'col', class: 'pb-hide-sm' }, 'Preço'))),
-        h('tbody', null, linhasT)))
-        : h('p', { class: 'pb-note' }, 'Nenhum ativo com esse filtro. Escolha "Todos" ou desmarque "Só candidatas à compra".'),
-      h('p', { class: 'pb-disc' }, 'A indicação é uma leitura automática da classificação do modelo (desconto, solidez, qualidade e proventos), com base nos dados de ' + dt(p.data_ref) + '. Não é recomendação de compra ou venda: confira o risco de cada ativo e a ficha antes de decidir.'));
+    // datalist da inclusão: ativos com nota primeiro, depois o catálogo de triagem
+    if (!addLista.childNodes.length) {
+      try { addLista.replaceChildren.apply(addLista, INV.universo().map(function (u) { return h('option', { value: u.ticker + ' — ' + u.nome }); })); } catch (e) { /* ok */ }
+    }
 
-    var cCart = h('div', { class: 'pb-card', id: 'resumo-carteira' });
+    // ---- minha lista
+    var lista = INV.lista.ler();
+    var itens = lista.map(function (t) { var a = porTicker[t] || null; return { t: t, a: a, info: a ? null : INV.infoTicker(t) }; });
+    var classeDe = function (x) { return x.a ? x.a.classe : x.info.classe; };
+    var filtrados = itens.filter(function (x) {
+      return (!filtroFacil.classe || classeDe(x) === filtroFacil.classe) && (!filtroFacil.soCompra || (x.a && CANDIDATAS.indexOf(x.a.sinal) >= 0));
+    }).sort(function (x, y) { return (y.a ? y.a.score : -1) - (x.a ? x.a.score : -1) || (x.t < y.t ? -1 : 1); });
+    if (!lista.length) {
+      boxLista.replaceChildren(h('p', { class: 'pb-note' }, 'Sua lista está vazia. Digite um código acima (ex.: PETR4, HGLG11) ou toque em "+ Lista" nos destaques abaixo.'));
+    } else {
+      var chips = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Filtrar a lista' });
+      [['', 'Todos'], ['Ação', 'Ações'], ['FII', 'FIIs']].forEach(function (c) {
+        chips.append(h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': String(filtroFacil.classe === c[0]), onclick: function () { filtroFacil.classe = c[0]; desenharResumo(); } }, c[1]));
+      });
+      chips.append(h('label', { class: 'inv-sim-opt', style: 'display:inline-flex;gap:.4rem;align-items:center' },
+        h('input', { type: 'checkbox', checked: filtroFacil.soCompra, onchange: function (e) { filtroFacil.soCompra = e.target.checked; desenharResumo(); } }),
+        h('span', null, 'Só candidatas à compra')));
+      var limpar = confirmarLimpar
+        ? h('div', { class: 'inv-actions' }, h('span', { class: 'pb-note' }, 'Tirar todos os ' + lista.length + ' ativos da lista?'),
+            h('button', { type: 'button', class: 'pb-btn inv-perigo', onclick: function () { confirmarLimpar = false; INV.lista.limpar(); } }, 'Sim, limpar'),
+            h('button', { type: 'button', class: 'pb-btn', onclick: function () { confirmarLimpar = false; desenharResumo(); } }, 'Voltar'))
+        : h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { confirmarLimpar = true; desenharResumo(); } }, 'Limpar lista'));
+      boxLista.replaceChildren(chips,
+        h('p', { class: 'pb-note', role: 'status', 'aria-live': 'polite' }, filtrados.length + ' de ' + lista.length + ' ativos'),
+        filtrados.length ? h('ul', { class: 'inv-resumo-lista' }, filtrados.map(function (x) { return linhaLista(x.t, x.a, x.info || {}); }))
+          : h('p', { class: 'pb-note' }, 'Nenhum ativo com esse filtro.'),
+        limpar,
+        h('p', { class: 'pb-disc' }, 'A indicação é uma leitura automática do modelo com dados de ' + dt(p.data_ref) + '. Não é recomendação: veja o risco e a ficha antes de decidir.'));
+    }
+
+    // ---- destaques do ranking (resumo do Ranking e da Visão geral do Avançado)
+    var top = A.filter(function (a) { return a.posicao; }).sort(PB.byPos).slice(0, 5);
+    boxDest.replaceChildren(h('div', { class: 'pb-card' },
+      h('h2', null, 'Destaques do ranking'),
+      h('p', { class: 'pb-note' }, 'As 5 maiores notas (0 a 10) entre os ' + A.filter(function (a) { return a.posicao; }).length + ' ativos analisados.'),
+      h('ul', { class: 'inv-resumo-lista' }, top.map(function (a) {
+        var na = lista.indexOf(a.ticker) >= 0;
+        return h('li', null,
+          h('div', { class: 'l' },
+            h('button', { type: 'button', class: 'inv-link', onclick: function () { PB.openAtivo(a.ticker); }, 'aria-label': 'Abrir ficha de ' + a.ticker }, a.ticker),
+            h('span', { class: 'm' }, a.nome), h('b', null, num(a.score / 100, 1)),
+            h('span', { class: 'inv-chip nd', style: 'color:' + corInd(a.sinal) }, indicacao(a.sinal)),
+            h('button', { type: 'button', class: 'pb-btn', disabled: na, 'aria-label': na ? a.ticker + ' já está na lista' : 'Incluir ' + a.ticker + ' na lista', onclick: function () { try { INV.lista.adicionar(a.ticker); } catch (e) { addMsg.replaceChildren(h('p', { class: 'pb-note warn' }, e.message)); } } }, na ? 'Na lista' : '+ Lista')));
+      })),
+      h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { irAvancado('ranking'); } }, 'Ver o ranking completo'))));
+
+    // ---- sua carteira (valor e risco de concentração)
     var cd = null;
     try { cd = typeof INV.carteiraDados === 'function' ? INV.carteiraDados() : null; } catch (e) { cd = null; }
     var vals = cd ? cd.aloc.linhas.filter(function (l) { return l.valorCent > 0; }).map(function (l) { return l.valorCent; }) : [];
-    cCart.append(h('h2', null, 'Sua carteira'));
+    boxCart.replaceChildren(h('h2', null, 'Sua carteira'));
     if (vals.length) {
       var total = 0; cd.aloc.linhas.forEach(function (l) { total += l.valorCent || 0; });
-      cCart.append(
+      boxCart.append(
         h('p', { class: 'pb-text' }, 'Posições a preço de mercado: ' + C.fmtBRL(total) + ' em ' + vals.length + (vals.length === 1 ? ' ativo.' : ' ativos.')),
         cartaoConcentracaoCorpo(C.concentracao(vals)),
         cd.aloc.semPreco && cd.aloc.semPreco.length ? h('p', { class: 'pb-note warn' }, 'Sem preço para: ' + cd.aloc.semPreco.join(', ') + '. Esses ativos ficaram fora da conta.') : document.createDocumentFragment(),
-        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { INV.ir('corretora', 'posicoes'); } }, 'Ver posições e alvos')));
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { INV.ir('corretora', 'posicoes'); } }, 'Ver posições')));
     } else {
-      cCart.append(h('p', { class: 'pb-note' }, 'Você ainda não registrou posições. Registre o que tem para ver a concentração e planejar aportes.'),
-        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { INV.ir('corretora', 'resumo'); } }, 'Ir para Minha carteira')));
+      boxCart.append(h('p', { class: 'pb-note' }, 'Nenhuma posição registrada ainda.'),
+        h('div', { class: 'inv-actions' }, h('button', { type: 'button', class: 'pb-btn', onclick: function () { INV.registrarOperacao('', 'compra'); } }, 'Registrar uma compra')));
     }
-
-    var cMais = h('div', { class: 'pb-card' },
-      h('h2', null, 'Quer ir mais fundo?'),
-      h('p', { class: 'pb-note' }, 'O modo Avançado mostra os mesmos números com o cálculo, o histórico, o cenário macro completo e as premissas. Nada do que você registrou ou escolheu se perde ao trocar.'),
-      h('div', { class: 'inv-actions' },
-        h('button', { type: 'button', class: 'pb-btn inv-pri', onclick: function () { irAvancado('geral'); } }, 'Abrir a análise completa'),
-        h('button', { type: 'button', class: 'pb-btn', onclick: function () { irAvancado('metodo'); } }, 'Como o score é calculado')),
-      h('p', { class: 'pb-disc' }, 'Material educacional; não é recomendação de investimento. Resultados passados não garantem resultados futuros. Os dados dependem das fontes e da data da coleta.'));
-
-    pagina.replaceChildren(faixa, cTab, cCart, cMais);
   }
   INV.aoMostrar('resumo', desenharResumo);
   if (W.dash && dash.onData) dash.onData(function () { if (PB.current === 'resumo') desenharResumo(); });
@@ -519,7 +597,7 @@
     var norm = function (t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
     function desenhar() {
       if (PB.current !== 'catalogo') return;
-      if (erro) { pg.replaceChildren(h('div', { class: 'pb-card' }, h('p', { class: 'pb-note' }, 'Não foi possível carregar o catálogo (' + erro + '). Ele é gerado junto com os dados do app; tente de novo depois de "Atualizar dados".'))); return; }
+      if (erro) { pg.replaceChildren(h('div', { class: 'pb-card' }, h('p', { class: 'pb-note' }, 'Não foi possível carregar o catálogo (' + erro + '). Ele é gerado junto com os dados do app; tente de novo depois da próxima atualização automática.'))); return; }
       if (!cat) { pg.replaceChildren(h('div', { class: 'pb-card', 'aria-live': 'polite' }, h('p', { class: 'pb-note' }, 'Carregando o catálogo…'))); carregar(); return; }
       var segs = Array.from(new Set(cat.map(function (x) { return x.segmento; }).filter(Boolean))).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
       var q = norm(F.q);

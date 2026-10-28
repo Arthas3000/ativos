@@ -1,9 +1,11 @@
-# Atualização manual do Painel B3: preços (Yahoo) + fundamentos (Fundamentus) + score + app.
+# Atualização do Painel B3: preços (Yahoo) + fundamentos (Fundamentus) + score + app.
+# Roda sozinha de segunda a sexta às 18h47 de Brasília (depois do fechamento do pregão) e também pode ser rodada à mão.
 # Dados de pesquisa manual (bancos, Vale, WEG, crédito dos FIIs, macro) continuam pela skill atualizar-painel-b3 no Claude.
-# Rode depois do fechamento do pregão (18h de Brasília). O botão "Atualizar dados" do app abre esta página.
 name: Atualizar painel
 
 on:
+  schedule:
+    - cron: "47 21 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -34,11 +36,15 @@ jobs:
           python 03_painel/atualizar.py build
           python 03_painel/atualizar.py teste
           python 03_painel/atualizar.py site
-          python 03_painel/atualizar.py snapshot
+      # a cópia completa da versão em historico/ só nas execuções manuais: a diária guardaria ~0,5 MB por pregão
+      - name: Snapshot da versão
+        if: github.event_name != 'schedule'
+        run: python 03_painel/atualizar.py snapshot
       - name: Gravar no repositório
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git add -A
+          git diff --cached --quiet && { echo "Nada mudou (feriado?)"; exit 0; }
           git commit -m "Atualização automática $(jq -r .versao 03_painel/config.json) ($(date -u +%F))"
           git push

@@ -38,7 +38,7 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 | `.claude/skills/atualizar-painel-b3/` | Skill que roda a atualização completa e gera uma nova versão. |
 | `03_painel/painel/app/` | Casca do app de celular (PWA): tokens de tema, camada `dash`, manifest, service worker, ícones. |
 | `docs/` | App gerado por `atualizar.py site`, publicado pelo GitHub Pages. Não editar à mão. |
-| `.github/workflows/atualizar.yml` | Atualização manual pelo botão "Atualizar dados" do app: preços, fundamentos, histórico longo, score, app e snapshot. |
+| `.github/workflows/atualizar.yml` | Atualização automática de segunda a sexta às 18h47 de Brasília (ou à mão no GitHub Actions): preços, fundamentos, histórico longo, score e app; snapshot só nas execuções manuais. |
 | `.github/workflows/testes.yml` | Testes a cada push e pull request: `node --test` (cálculos) e `atualizar.py teste` (pipeline). |
 | `03_painel/dados_longos/` | `serie_longa.json` (5 anos diários, com dividendos) e `indices.json` (CDI e IPCA), gerados por `atualizar.py historico`. Não entram no snapshot. |
 | `03_painel/painel/app/invest*.js` | Módulo de investimentos do app: `invest.js` (cálculos), `invest-store.js` (dados, seções e Ajustes), `invest-sim.js` (Simulador), `invest-corretora.js` (Minha carteira), `invest-nav.js` (áreas do app e estilo), `invest-ajuda.js` (glossário e botões “?”), `invest-assistente.js` (Assistente de alocação), `invest-tour.js` (tour "Como usar"). |
@@ -49,9 +49,9 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 O app do GitHub Pages (não o painel do Claude) organiza tudo em quatro áreas: Mercado (as oito abas do painel) e mais três:
 
 - **Simulador** (etapas Montar carteira › Resultado): carteira histórica com aportes mensais, dividendos e custos, comparada ao Ibovespa, ao CDI e ao IPCA (retorno nominal e real). É análise do passado: não garante resultado futuro.
-- **Minha carteira** (seções Resumo, Posições, Comprar ou vender, Planejar aporte, Caixa, Transações, Meus ativos): o que você registrou, com primeiros passos guiados e o Assistente de alocação de aportes. Uma proposta nunca vira transação sem a sua confirmação, e o app não envia ordens.
+- **Minha carteira** (seções Resumo, Posições, Comprar ou vender, Planejar compra, Caixa, Transações, Meus ativos): o que você registrou, com primeiros passos guiados e o Assistente de alocação de aportes. Uma proposta nunca vira transação sem a sua confirmação, e o app não envia ordens.
 - **Ajustes** (seções Cotações, Custos e lotes, Ativos extras, Backup, Fontes de dados).
-- **Navegação:** o app tem quatro áreas (Mercado, Minha carteira, Simulador, Ajustes), que viram uma barra no rodapé no celular. Cada área se divide em seções, e cada seção tem endereço próprio (ex.: `#corretora/caixa`). O botão **Como usar** abre o tour guiado; o **Glossário** (em Mercado) e os botões **?** ao lado dos termos explicam o vocabulário técnico. A revisão de UX está em `UX_REVISAO.md`.
+- **Navegação:** o app tem quatro áreas (Mercado, Minha carteira, Simulador, Ajustes), que viram uma barra no rodapé no celular. Cada área se divide em seções, e cada seção tem endereço próprio (ex.: `#corretora/caixa`). O botão **Como usar** abre o tour guiado (curto no modo Fácil, completo no Avançado); o **Glossário** (em Mercado) e os botões **?** ao lado dos termos explicam o vocabulário técnico. A revisão de UX está em `UX_REVISAO.md`.
 
 ### Modo Fácil e modo Avançado
 
@@ -59,12 +59,17 @@ Um botão de tema (claro/escuro, lembrado no aparelho; sem escolha, segue o sist
 
 | Elemento | Fácil (2–5 min) | Avançado (15–20 min) |
 |---|---|---|
-| Mercado | aba **Hoje**: cenário em 4 números e tabela única *Nota (0–10) · Indicação · Preço*, com o risco de cada ativo (filtros Todos/Ações/FIIs/só candidatas), mais Ficha e Glossário | todas as abas; Ranking com filtro por classificação, colunas essenciais/todas, busca e coluna Indicação; Cenário macro com filtro por tema |
+| Mercado | aba **Hoje**: cenário em 4 números; **Minha lista**, que começa vazia e recebe um ativo por vez pelo código (nota 0–10, indicação, preço, risco e botões Planejar compra / Registrar compra / Ficha / Tirar; filtros Todos/Ações/FIIs/só candidatas); **Destaques do ranking** (as 5 maiores notas, com “+ Lista”); mais Ficha, Adicionar ativo e Glossário | todas as abas; Ranking com filtro por classificação, colunas essenciais/todas, busca e coluna Indicação; Cenário macro com filtro por tema |
 | Indicação | leitura da classificação (`sinal`): Candidata a compra, Compra com cautela, Boa mas sem desconto, Neutro, Atenção ao rendimento, Evitar; **não é recomendação** | a mesma indicação aparece no Ranking |
 | Risco do Simulador | nível, queda máxima e oscilação em frases, mais os avisos | tabela carteira × Ibovespa × CDI, fórmulas e limites |
 | Concentração | nível e frase | HHI, nº efetivo de ativos, maior posição, faixas |
 | Simulador | campos essenciais; “premissas em uso” em uma linha | todos os parâmetros, retorno por ativo, XIRR, lista de premissas |
-| Ajustes / carteira | só o essencial (Cotações, Backup…) | também Custos, Ativos extras, Fontes, Meus ativos |
+| Minha carteira | Resumo (total investido, valor hoje, resultado; o caixa só aparece se houver depósito registrado), concentração, Posições com **preço médio pago** e alvo só para leitura, **Registrar compra ou venda** numa tela (ativo, quantidade, preço pago, data, taxas opcionais; “Corrigir” e “Excluir” nas transações), **Planejar compra** (valor → quantas cotas, no fracionário, com o código `F`: PETR4F), Caixa, Transações e Meus ativos resumidos | alvo % editável, formulário em duas etapas (estimativa e registro), Assistente de alocação de 5 passos, filtros e histórico de correções nas transações |
+| Ajustes | as cinco seções, simplificadas (Custos só com as taxas; Fontes em três linhas) | todos os campos e detalhes técnicos |
+
+Um código usado numa compra que não está no app (ex.: KLBN11) vira ativo próprio sozinho, com nome e classe do catálogo. A lista de acompanhamento fica no backup (`lista`).
+
+**Atualização automática.** O botão “Atualizar dados” saiu da barra: o workflow `atualizar.yml` roda sozinho de segunda a sexta às 18h47 de Brasília (e continua disponível à mão no GitHub Actions; a cópia em `historico/` só é feita nas execuções manuais). Com o token da brapi, os preços da lista e da carteira vêm do dia e se renovam a cada 5 minutos com a tela aberta.
 
 Trocar de modo mantém aba, ativo escolhido, carteira, parâmetros e resultados; parâmetros escondidos no Fácil continuam valendo e aparecem como “premissas em uso”. Avisos e limitações nunca somem. Um link para tela só do Avançado abre nele.
 
@@ -74,7 +79,7 @@ Pontos importantes:
 
 - **Dados só no aparelho.** Carteira, transações e ativos personalizados ficam no `localStorage` do navegador, sem servidor. Use Exportar/Importar em Ajustes › Backup para fazer backup; limpar os dados do navegador apaga tudo.
 - **Token da brapi.** A cotação ao vivo usa o seu token de brapi.dev, colado em Ajustes › Cotações. Ele fica só neste navegador: não vai para o GitHub nem para o backup. Sem token, vale o último fechamento (marcado "atrasado") ou o preço digitado por você.
-- **Ativos extras no histórico.** Ativo personalizado só aparece no Simulador depois de entrar em `"extras": ["TICK1"]` no `03_painel/config.json`; o histórico dele chega na próxima execução de "Atualizar dados".
+- **Ativos extras no histórico.** Ativo personalizado só aparece no Simulador depois de entrar em `"extras": ["TICK1"]` no `03_painel/config.json`; o histórico dele chega na próxima atualização automática.
 - **Limitações.** Só ações e FIIs em reais na B3. Dividendos do Yahoo vêm brutos (sem IR, JCP incluído). Simulação usa preço de fechamento, sem imposto nem come-cotas. Material educacional, não é recomendação.
 
 ## Próximas etapas (planejadas)

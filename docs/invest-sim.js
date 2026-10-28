@@ -216,7 +216,7 @@
   function cardIndisponivel(msg) {
     return h('div', { class: 'pb-card' }, h('h2', null, 'Simulação histórica'),
       h('p', { class: 'pb-text' }, 'Histórico longo indisponível' + (msg ? ' (' + msg + ')' : '') + '.'),
-      h('p', { class: 'pb-text' }, 'O histórico de 5 anos (preços diários e dividendos) é gerado pelo GitHub Actions. Ele chega ao app quando você toca em "Atualizar dados" e a execução termina; depois recarregue a página. Até lá, a simulação fica desligada — nada é inventado.'),
+      h('p', { class: 'pb-text' }, 'O histórico de 5 anos (preços diários e dividendos) é gerado pelo GitHub Actions. Ele chega ao app na atualização automática depois de cada pregão; depois recarregue a página. Até lá, a simulação fica desligada — nada é inventado.'),
       h('p', { class: 'pb-disc' }, 'Material educacional; não é recomendação de investimento.'));
   }
 

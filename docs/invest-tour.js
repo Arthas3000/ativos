@@ -107,7 +107,7 @@
     function g() { var x = par(); return x ? pn(x.g, 1) + '%' : 'o crescimento perpétuo (g)'; }
     function dEst() { var x = par(); return x ? fd2(x.data_pre_estresse) + ' → ' + fd2(x.data_estresse) : 'do pregão pré-estresse ao do estresse'; }
     var SEM_SIM = 'Este bloco aparece depois que você toca em “Simular”, com o formulário preenchido e o histórico longo disponível.';
-    var SEM_FORM = 'O formulário só aparece quando o histórico longo (serie_longa.json) está carregado. Sem ele, a aba mostra um aviso e a simulação fica desligada: nada é inventado. O histórico chega pelo botão “Atualizar dados” (GitHub Actions); depois recarregue a página.';
+    var SEM_FORM = 'O formulário só aparece quando o histórico longo (serie_longa.json) está carregado. Sem ele, a aba mostra um aviso e a simulação fica desligada: nada é inventado. O histórico chega pela atualização automática (GitHub Actions) depois de cada pregão; depois recarregue a página.';
 
     /* ---- início ---- */
     s(C_INI, 'geral', null, 'Tutorial do Painel B3',
@@ -115,13 +115,11 @@
 
     /* ---- barra e cabeçalho ---- */
     s(C_BAR, 'geral', '.app-bar', 'Barra do app',
-      'A barra fica fixa no topo enquanto você rola. À esquerda, o nome do app e a data dos preços; no meio, as quatro áreas do app; à direita, “Como usar” (este tour) e “Atualizar dados”.');
+      'A barra fica fixa no topo enquanto você rola. À esquerda, o nome do app e a data dos preços; no meio, as quatro áreas do app; à direita, o tema, o modo Fácil/Avançado e “Como usar” (este tour).');
     s(C_BAR, 'geral', '.inv-grupos', 'As quatro áreas do app',
       'Mercado: a análise dos 20 ativos (score, preços, valor justo, cenário). Minha carteira: o que você tem de verdade e o planejamento de aportes. Simulador: como uma carteira teria se saído no passado. Ajustes: cotações, custos, backup e fontes. No celular, essas áreas ficam numa barra no rodapé da tela.');
     s(C_BAR, 'geral', '#app-status', 'Versão e data dos preços',
       'Mostra “Versão vN · preços de DD/MM/AAAA”, lido de parametros.json: a versão da análise e o dia do último fechamento usado no score. Se os dados não puderem ser lidos e não houver cópia salva, aparece “Sem conexão e sem cópia salva dos dados”.');
-    s(C_BAR, 'geral', '#app-update', 'Atualizar dados',
-      'Abre, em outra aba do navegador, a página do fluxo “Atualizar painel” no GitHub Actions. Ao rodá-lo (é preciso ter permissão no repositório), ele gera uma nova versão: preços (Yahoo), histórico de 5 anos com dividendos, CDI e IPCA (BCB), fundamentos (Fundamentus), score e app. Dados de pesquisa manual, como bancos, crédito dos FIIs e macro, não são renovados por esse botão. Quando a execução terminar, recarregue a página.');
     s(C_BAR, 'geral', '#topo .pb-title', 'Título do painel',
       'O painel pontua 20 ativos fixos da B3, ações e fundos imobiliários (FIIs), de 0 a 1000. O score organiza oportunidades segundo regras explícitas; ele não prevê preços e não é recomendação.');
     s(C_BAR, 'geral', '#takeaway', 'Resumo em uma frase',
@@ -294,7 +292,7 @@
     s(C_COR, 'corretora', '#cor-preco', 'Preço',
       'Vem preenchido pela cotação, mas você pode digitar. Ao digitar, o preço vira “manual”, nenhuma atualização o sobrescreve e aparece o botão “Usar cotação” para voltar ao automático.');
     s(C_COR, 'corretora', '#cor-valor', 'Valor a investir (ou a vender)',
-      'Quanto você quer aplicar. A partir dele o app calcula a quantidade estimada respeitando o lote do ativo (1 = fracionário, 100 = lote padrão) e as taxas definidas em Ajustes › Custos e lotes. Na venda, a quantidade não passa do que você tem registrado.');
+      'Quanto você quer aplicar. A partir dele o app calcula a quantidade estimada respeitando o lote do ativo (1 = fracionário, 100 = lote padrão) e as taxas definidas em Ajustes › Custos. Na venda, a quantidade não passa do que você tem registrado.');
     s(C_COR, 'corretora', 'apos:Estimativa', 'Estimativa',
       'Quantidade, valor bruto, taxas, total e sobra do valor. É uma estimativa com o preço da tela, não um valor que será cobrado: o preço real de execução pode ser outro.');
     s(C_COR, 'corretora', 'form[aria-labelledby="cor-reg-t"]', 'Registrar operação executada',
@@ -326,7 +324,7 @@
 
     /* ---- configurações ---- */
     s(C_CFG, 'config', '#config .inv-sub', 'Ajustes',
-      'Cinco seções: Cotações, Custos e lotes, Ativos extras, Backup e Fontes de dados. Se o navegador não permitir gravar dados locais, um aviso no topo diz que tudo se perde ao fechar a página. Seus dados ficam apenas neste aparelho.');
+      'Cinco seções: Cotações, Custos, Ativos extras, Backup e Fontes de dados. Se o navegador não permitir gravar dados locais, um aviso no topo diz que tudo se perde ao fechar a página. Seus dados ficam apenas neste aparelho.');
     s(C_CFG, 'config', 'card:Cotações', 'Cotações (brapi.dev)',
       'Sem token, o app usa o último fechamento salvo pelo GitHub Actions, marcado como “atrasado”. Para ver o preço do dia, crie uma conta gratuita em brapi.dev, copie o seu token na área de tokens/API e cole abaixo. O atraso e os limites das cotações dependem do seu plano na brapi; consulte o site deles.');
     s(C_CFG, 'config', '#inv-cfg-token', 'Token da brapi',
@@ -334,15 +332,44 @@
     s(C_CFG, 'config', 'card:Custos padrão', 'Custos padrão',
       'Corretagem fixa por ordem (R$), emolumentos e taxas (%), lote padrão dos 20 ativos (1 = fracionário, 100 = lote padrão) e intensidade padrão do score. São pontos de partida para as compras e o planejamento de aporte, e você pode ajustar em cada operação. Valores inválidos são recusados com mensagem.');
     s(C_CFG, 'config', 'card:Ativos extras', 'Ativos extras no histórico',
-      'Lista seus ativos personalizados e se já têm série longa. Para o Simulador enxergá-los, o ticker precisa entrar no config.json; o app mostra o trecho “extras” pronto para copiar e o link de edição no GitHub. O histórico chega na próxima execução de “Atualizar dados”.');
+      'Lista seus ativos personalizados e se já têm série longa. Para o Simulador enxergá-los, o ticker precisa entrar no config.json; o app mostra o trecho “extras” pronto para copiar e o link de edição no GitHub. O histórico chega na próxima atualização automática.');
     s(C_CFG, 'config', 'card:Backup', 'Backup',
       'Exportar baixa um arquivo .json com carteira, transações, alvos e ativos próprios, sem o token. Importar substitui todos os dados do aparelho e antes pede confirmação com o botão “Substituir dados”. Apagar tudo exige digitar APAGAR. Limpar os dados do navegador, trocar de aparelho ou desinstalar o app apaga a carteira: exporte com frequência.');
     s(C_CFG, 'config', 'card:Fontes de dados', 'Fontes de dados',
-      'Mostra se serie_longa.json e indices.json foram carregados, quando foram gerados, o período coberto, a fonte e eventuais falhas. Se aparecer “indisponível”, o resto do app continua funcionando; o histórico longo vem do botão “Atualizar dados”.');
+      'Mostra se serie_longa.json e indices.json foram carregados, quando foram gerados, o período coberto, a fonte e eventuais falhas. Se aparecer “indisponível”, o resto do app continua funcionando; o histórico longo vem da atualização automática.');
 
     /* ---- encerramento ---- */
     s(C_FIM, null, null, 'Antes de concluir',
       'Este painel é material educacional e não é recomendação de compra, venda ou manutenção de ativos. Preço “atrasado” é o último fechamento; “ao vivo” depende do seu token e plano; “manual” foi digitado por você. Proposta não é ordem executada: registre só o que ocorreu na corretora. A simulação não garante futuro, e os dados da carteira ficam só neste aparelho (faça backup).');
+    return p;
+  }
+
+  // tour curto do modo Fácil: só as telas que o Fácil mostra
+  function roteiroFacil() {
+    var p = [], C_F = 'Modo Fácil';
+    function s(cap, aba, sel, titulo, texto, ausente) { p.push({ cap: cap, aba: aba, sel: sel, titulo: titulo, texto: texto, ausente: ausente || null }); }
+    s(C_F, 'resumo', null, 'Como usar o modo Fácil',
+      'Um passeio rápido pelas telas do modo Fácil. Avance com o botão ou a seta →, volte com ← e feche com Esc. Material educacional; não é recomendação de investimento.');
+    s(C_F, 'resumo', '.inv-grupos', 'As áreas do app',
+      'Mercado (tela Hoje, ficha dos ativos e glossário), Minha carteira (o que você tem e o planejamento da próxima compra) e Ajustes. No celular, ficam no rodapé. O botão Fácil/Avançado troca só a apresentação: os dados são os mesmos.');
+    s(C_F, 'resumo', 'card:Cenário em 4 números', 'Cenário em 4 números',
+      'Ibovespa no dia do estresse, Selic, dólar e juro futuro (DI jan/31). Os preços do app são atualizados sozinhos depois de cada pregão.');
+    s(C_F, 'resumo', 'card:Minha lista', 'Minha lista',
+      'Começa vazia. Digite o código de um ativo (ex.: PETR4 ou HGLG11) e toque em Incluir. Cada ativo mostra nota de 0 a 10, indicação, preço e risco, com botões para planejar a compra, registrar a compra e abrir a ficha.');
+    s(C_F, 'resumo', 'card:Destaques do ranking', 'Destaques do ranking',
+      'As 5 maiores notas do modelo. Toque em “+ Lista” para acompanhar um deles. O ranking completo fica no modo Avançado.');
+    s(C_F, 'corretora', 'card:Quantas cotas comprar', 'Planejar compra',
+      'Escolha o ativo e diga quanto quer investir: o app mostra quantas cotas comprar (de 1 em 1, no mercado fracionário, com o F no fim do código: PETR4F), o total e a sobra.');
+    s(C_F, 'corretora', 'card:Registrar compra ou venda', 'Registrar compra ou venda',
+      'Depois de executar na corretora, anote a quantidade e o preço que você pagou (ou recebeu). O app calcula o preço médio e o resultado. Nada é enviado à corretora.');
+    s(C_F, 'corretora', 'card:Posições', 'Posições',
+      'Quanto você tem de cada ativo, o preço médio pago, o preço de hoje, o resultado e a distribuição atual comparada ao alvo.');
+    s(C_F, 'corretora', 'card:Transações', 'Transações',
+      'Tudo o que você registrou. “Corrigir” abre o registro para editar; “Excluir” tira das contas.');
+    s(C_F, 'config', 'card:Cotações', 'Preço do dia',
+      'Sem token, o app usa o último fechamento. Com o token gratuito da brapi.dev, os preços da sua lista e da carteira passam a vir ao vivo e são renovados sozinhos a cada 5 minutos.');
+    s(C_F, 'config', 'card:Backup', 'Backup',
+      'Seus registros ficam só neste aparelho. Exporte um backup de vez em quando.');
     return p;
   }
 
@@ -557,7 +584,7 @@
   function abrir() {
     if (aberto) return;
     montar();
-    passos = roteiro().filter(function (p) { return !p.aba || pagina(p.aba); });
+    passos = (window.INVModo && window.INVModo.atual() === 'facil' ? roteiroFacil() : roteiro()).filter(function (p) { return !p.aba || pagina(p.aba); });
     if (!passos.length) return;
     origem = PB.current; scrollOrigem = window.pageYOffset || 0;
     montarCapitulos();
@@ -585,5 +612,5 @@
   }
 
   botao.addEventListener('click', function () { if (aberto) fechar(true); else abrir(); });
-  window.INVTour = { abrir: abrir, fechar: function () { fechar(true); }, passos: function () { return roteiro().length; } };
+  window.INVTour = { abrir: abrir, fechar: function () { fechar(true); }, passos: function () { return (window.INVModo && window.INVModo.atual() === 'facil' ? roteiroFacil() : roteiro()).length; } };
 })();
