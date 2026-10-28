@@ -969,12 +969,12 @@
     var s = t.replace(/\s+/g, '').toUpperCase();
     if (!s) return { ok: false, ticker: null, erro: 'Informe o código do ativo.' };
     var aviso = null;
-    if (/^[A-Z]{4}\d{1,2}F$/.test(s)) {
+    if (/^[A-Z][A-Z0-9]{3}\d{1,2}B?F$/.test(s)) {
       s = s.slice(0, -1);
       aviso = 'O sufixo F indica o mercado fracionário; usamos ' + s + '.';
     }
-    if (!/^[A-Z]{4}\d{1,2}$/.test(s)) {
-      return { ok: false, ticker: null, erro: 'Código inválido: use 4 letras e 1 ou 2 números (ex.: PETR4, TAEE11).' };
+    if (!/^[A-Z][A-Z0-9]{3}\d{1,2}B?$/.test(s)) {
+      return { ok: false, ticker: null, erro: 'Código inválido: use 4 caracteres (letras, ou letras e um número como em B3SA3) e 1 ou 2 números no fim (ex.: PETR4, TAEE11).' };
     }
     return { ok: true, ticker: s, erro: null, aviso: aviso };
   }

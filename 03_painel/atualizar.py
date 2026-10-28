@@ -218,6 +218,61 @@ def r2(x, k=1):
     return None if x is None else round(x * k, 2)
 
 
+# ---------------------------------------------------------------- catalogo de triagem (ativos sem score)
+CATALOGO_BRUTO = PAINEL / "catalogo_bruto.csv"
+PLACEHOLDERS = ("Cadastro para triagem", "Validar cotação", "Pendente de análise")
+SINAIS_OK = {"oportunidade", "oportunidade-com-risco", "qualidade-sem-margem", "neutro", "risco-rendimento", "armadilha"}
+
+
+def _partes(v):
+    return [p.strip() for p in (v or "").split(" | ") if p.strip()]
+
+
+def _real(v):
+    """Campo mesclado 'texto de triagem | texto real': descarta o texto padrão de triagem e fica com o último trecho real."""
+    ps = _partes(v)
+    reais = [p for p in ps if not p.startswith(PLACEHOLDERS)]
+    return reais[-1] if reais else (ps[-1] if ps else "")
+
+
+def monta_catalogo(linhas, ranking):
+    """Limpa o CSV mesclado e devolve os ativos que NAO estao no ranking, sem score. Nada aqui e recomendacao:
+    'status' diz se ha leitura preliminar (nao validada) ou so o cadastro de triagem."""
+    saida, vistos = [], set()
+    for r in linhas:
+        t = r["ticker"].strip().upper()
+        assert re.fullmatch(r"[A-Z][A-Z0-9]{3}\d{1,2}B?", t), f"ticker invalido no catalogo: {t}"
+        assert t not in vistos, f"ticker repetido no catalogo: {t}"
+        vistos.add(t)
+        if t in ranking:
+            continue
+        sinais = [x for x in _partes(r["sinal"]) if x != "validar"]
+        assert all(x in SINAIS_OK for x in sinais), f"{t}: sinal desconhecido {r['sinal']}"
+        sinal = sinais[-1] if sinais else "validar"
+        seg = _real(r["segmento"])
+        preliminar = sinal != "validar" and not _real(r["tese"]).startswith(PLACEHOLDERS)
+        saida.append({
+            "ticker": t, "nome": _real(r["nome"]), "segmento": seg,
+            "classe": "FII" if seg.startswith("FII") else "Ação",
+            "status": "preliminar" if preliminar else "sem-analise", "sinal": sinal,
+            "confianca": _real(r["confianca"]) if preliminar else "Baixa",
+            "tese": _real(r["tese"]) if preliminar else "", "risco": _real(r["risco"]) if preliminar else "",
+            "nota": _real(r["nota"]) if preliminar else ""})
+    return sorted(saida, key=lambda x: x["ticker"])
+
+
+def cmd_catalogo():
+    if not CATALOGO_BRUTO.exists():
+        print("AVISO: catalogo_bruto.csv nao existe; catalogo.json nao gerado")
+        return
+    ranking = {r["ticker"] for r in read_csv(ENTRADA)}
+    cat = monta_catalogo(read_csv(CATALOGO_BRUTO), ranking)
+    OUT.mkdir(exist_ok=True)
+    (OUT / "catalogo.json").write_text(json.dumps(cat, ensure_ascii=False, indent=1), encoding="utf-8")
+    n = sum(1 for x in cat if x["status"] == "preliminar")
+    print(f"catalogo.json: {len(cat)} ativos fora do ranking ({n} com leitura preliminar, {len(cat) - n} so cadastro)")
+
+
 def cmd_build():
     c, ent, nts = cfg(), {r["ticker"]: r for r in read_csv(ENTRADA)}, notas()
     precos = json.loads((SCORE / "precos_yahoo_3m.json").read_text(encoding="utf-8"))
@@ -323,6 +378,7 @@ def parse_yahoo(js, data_ref, casas=2):
             divs[d] = round(float(ev["amount"]), 4)
     return {"d": datas, "c": [por_data[d] for d in datas], "div": [[d, divs[d]] for d in sorted(divs)]}
 
+    cmd_catalogo()
 
 def parse_sgs(lista, mensal=False):
     """SGS do BCB [{'data': 'DD/MM/AAAA', 'valor': '0.029256'}] -> (datas, valores). Mensal: datas 'AAAA-MM'."""
@@ -559,6 +615,32 @@ def teste_precos_e_score(ent, ativos):
     print(f"ok: janela de precos, var_stress do CSV e IBOV_STRESS ({score.IBOV_STRESS}) batem com o Yahoo")
 
 
+def teste_catalogo(ent):
+    ranking = {r["ticker"] for r in ent}
+    bruto = [{"ticker": "AAAA3", "nome": "A | A S.A.", "segmento": "FII papel | FII papel CDI", "confianca": "Baixa | Alta", "sinal": "validar | neutro",
+              "tese": "Cadastro para triagem; tese x. | Boa", "risco": "Validar cotação. | Juros", "nota": "Pendente de análise. | Ok", "travar": ""},
+             {"ticker": "BBBB4", "nome": "B", "segmento": "Bancário", "confianca": "Baixa", "sinal": "validar",
+              "tese": "Cadastro para triagem; tese x.", "risco": "Validar cotação.", "nota": "Pendente de análise.", "travar": ""},
+             {"ticker": "CYRE3", "nome": "C", "segmento": "x", "confianca": "Alta", "sinal": "oportunidade", "tese": "t", "risco": "r", "nota": "n", "travar": ""}]
+    c = {x["ticker"]: x for x in monta_catalogo(bruto, ranking)}
+    assert set(c) == {"AAAA3", "BBBB4"}, "ativo do ranking deve ficar fora do catalogo"
+    a, b = c["AAAA3"], c["BBBB4"]
+    assert (a["nome"], a["segmento"], a["classe"], a["status"], a["sinal"], a["confianca"], a["tese"]) == ("A S.A.", "FII papel CDI", "FII", "preliminar", "neutro", "Alta", "Boa")
+    assert (b["status"], b["sinal"], b["confianca"], b["tese"], b["classe"]) == ("sem-analise", "validar", "Baixa", "", "Ação")
+    for x in ({**bruto[0], "ticker": "AAAA"}, {**bruto[0], "sinal": "compre"}, bruto[0] | {}):
+        pass
+    try:
+        monta_catalogo([bruto[0], bruto[0]], ranking)
+        raise SystemExit("ticker repetido deveria falhar")
+    except AssertionError:
+        pass
+    if (OUT / "catalogo.json").exists():
+        cat = json.loads((OUT / "catalogo.json").read_text(encoding="utf-8"))
+        assert not ({x["ticker"] for x in cat} & ranking) and len({x["ticker"] for x in cat}) == len(cat)
+        assert all(x["status"] in ("preliminar", "sem-analise") for x in cat)
+        print(f"ok: catalogo com {len(cat)} ativos fora do ranking")
+
+
 def cmd_teste():
     ent, nts = read_csv(ENTRADA), notas()
     ativos = json.loads((OUT / "ativos.json").read_text(encoding="utf-8"))
@@ -570,6 +652,7 @@ def cmd_teste():
     assert br("1.234,5%") == 1234.5 and br("-") is None and norm("Cotação") == "cotacao"
     assert pick(["P/L", "6,91", "Lucro Líquido", "1", "Lucro Líquido", "2"], "Lucro Líquido", 1) == "2"
     print(f"ok: {len(ativos)} ativos consistentes")
+    teste_catalogo(ent)
     teste_precos_e_score(ent, ativos)
     teste_historico()
 
@@ -577,5 +660,5 @@ def cmd_teste():
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     {"precos": cmd_precos, "build": cmd_build, "snapshot": cmd_snapshot, "teste": cmd_teste,
-     "nova-versao": cmd_nova_versao, "auto-datas": cmd_auto_datas, "site": cmd_site, "historico": cmd_historico,
+     "nova-versao": cmd_nova_versao, "catalogo": cmd_catalogo, "auto-datas": cmd_auto_datas, "site": cmd_site, "historico": cmd_historico,
      "fundamentus": lambda: cmd_fundamentus(apply="--nao-aplicar" not in sys.argv)}.get(cmd, lambda: print(__doc__))()
