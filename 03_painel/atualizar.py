@@ -8,6 +8,7 @@ Uso (de qualquer pasta):
   python 03_painel/atualizar.py auto-datas                  # data_ref = ultimo pregao fechado; 1m e 1s antes
   python 03_painel/atualizar.py historico                   # Yahoo 5a + BCB -> 03_painel/dados_longos/{serie_longa,indices}.json
   python 03_painel/atualizar.py site                        # app PWA em docs/ (GitHub Pages)
+  python 03_painel/atualizar.py cotacoes                    # Yahoo, ultimo preco do dia -> docs/dados/cotacoes.json (durante o pregao)
   python 03_painel/atualizar.py snapshot                    # copia a versao atual para 03_painel/historico/<data>_<versao>/
                                                             # (sem dados_longos: e reproduzivel pelo comando historico e grande)
   python 03_painel/atualizar.py teste                       # checagens de consistencia
@@ -99,6 +100,59 @@ def cmd_precos():
         rows = out[t]["rows"]
         print(f"{t:7s} {len(rows)} pregoes, ultimo {rows[-1]['d']} {rows[-1]['c']:.2f}")
     (SCORE / "precos_yahoo_3m.json").write_text(json.dumps(out), encoding="utf-8")
+
+
+# ---------------------------------------------------------------- cotacoes do dia (Yahoo, durante o pregao)
+def parse_cotacao(js):
+    """Chart API do Yahoo (range=1d) -> [preco, 'AAAA-MM-DDTHH:MM' de Brasilia, variacao do dia em %] ou None (funcao pura)."""
+    m = js["chart"]["result"][0]["meta"]
+    p, ts = m.get("regularMarketPrice"), m.get("regularMarketTime")
+    if not p or not ts or p <= 0:
+        return None
+    ant = m.get("chartPreviousClose") or m.get("previousClose")
+    quando = dt.datetime.fromtimestamp(ts, BRT).strftime("%Y-%m-%dT%H:%M")
+    return [round(float(p), 2), quando, round((p / ant - 1) * 100, 2) if ant else None]
+
+
+def tickers_cotacoes():
+    """Todos os codigos que o app conhece: ranking, adicionados, catalogo de triagem e extras do config."""
+    ts = [a["ticker"] for a in json.loads((OUT / "ativos.json").read_text(encoding="utf-8"))]
+    for nome, pega in (("extras.json", lambda d: [f["ticker"] for f in d.get("fichas", [])]),
+                       ("catalogo.json", lambda d: [x["ticker"] for x in d])):
+        f = OUT / nome
+        if f.exists():
+            ts += pega(json.loads(f.read_text(encoding="utf-8")))
+    ts += cfg().get("extras", [])
+    return list(dict.fromkeys(ts))
+
+
+def cmd_cotacoes():
+    """Ultimo preco de cada ativo (atraso de cerca de 15 min no Yahoo) para o app mostrar o preco do dia sem token.
+    Grava so docs/dados/cotacoes.json (arquivo pequeno, renovado varias vezes por pregao pelo workflow cotacoes.yml)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def uma(t):
+        sym = "^BVSP" if t == "IBOV" else t + ".SA"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=1d&interval=1d"
+        for tentativa in range(2):
+            try:
+                return t, parse_cotacao(json.load(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20)))
+            except Exception:                         # ticker sem negocio, fora do Yahoo ou falha de rede: tenta de novo uma vez
+                time.sleep(1 + tentativa)
+        return t, None
+
+    tickers = tickers_cotacoes() + ["IBOV"]
+    with ThreadPoolExecutor(6) as ex:
+        res = dict(ex.map(uma, tickers))
+    precos = {t: v for t, v in res.items() if v}
+    if not precos:
+        sys.exit("ERRO: nenhuma cotacao obtida; cotacoes.json anterior mantido.")
+    out = {"gerado_em": dt.datetime.now(BRT).strftime("%Y-%m-%dT%H:%M"), "fonte": "Yahoo Finance (atraso de cerca de 15 minutos)",
+           "precos": precos, "sem_cotacao": sorted(t for t, v in res.items() if not v)}
+    destino = ROOT / "docs" / "dados" / "cotacoes.json"
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"cotacoes: {len(precos)} de {len(tickers)} ativos ({len(out['sem_cotacao'])} sem cotacao) -> {destino.relative_to(ROOT)}")
 
 
 # ---------------------------------------------------------------- fundamentos (Fundamentus)
@@ -975,10 +1029,23 @@ def cmd_teste():
     teste_extras(ent)
     teste_precos_e_score(ent, ativos)
     teste_historico()
+    teste_cotacoes()
+
+
+def teste_cotacoes():
+    """Parser das cotacoes do dia, offline."""
+    ts = int(dt.datetime(2026, 10, 28, 14, 37, tzinfo=BRT).timestamp())
+    js = {"chart": {"result": [{"meta": {"regularMarketPrice": 38.456, "regularMarketTime": ts, "chartPreviousClose": 37.0}}]}}
+    assert parse_cotacao(js) == [38.46, "2026-10-28T14:37", 3.94]
+    assert parse_cotacao({"chart": {"result": [{"meta": {"regularMarketPrice": None, "regularMarketTime": ts}}]}}) is None
+    sem_ant = parse_cotacao({"chart": {"result": [{"meta": {"regularMarketPrice": 10, "regularMarketTime": ts}}]}})
+    assert sem_ant == [10.0, "2026-10-28T14:37", None]
+    assert len(tickers_cotacoes()) >= 20
+    print("ok: parser das cotacoes do dia")
 
 
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     {"precos": cmd_precos, "build": cmd_build, "snapshot": cmd_snapshot, "teste": cmd_teste,
-     "nova-versao": cmd_nova_versao, "catalogo": cmd_catalogo, "adicionar": cmd_adicionar, "extras": cmd_extras, "auto-datas": cmd_auto_datas, "site": cmd_site, "historico": cmd_historico,
+     "nova-versao": cmd_nova_versao, "catalogo": cmd_catalogo, "adicionar": cmd_adicionar, "extras": cmd_extras, "auto-datas": cmd_auto_datas, "site": cmd_site, "historico": cmd_historico, "cotacoes": cmd_cotacoes,
      "fundamentus": lambda: cmd_fundamentus(apply="--nao-aplicar" not in sys.argv)}.get(cmd, lambda: print(__doc__))()

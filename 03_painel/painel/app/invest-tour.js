@@ -367,7 +367,7 @@
     s(C_F, 'corretora', 'card:Transações', 'Transações',
       'Tudo o que você registrou. “Corrigir” abre o registro para editar; “Excluir” tira das contas.');
     s(C_F, 'config', 'card:Cotações', 'Preço do dia',
-      'Sem token, o app usa o último fechamento. Com o token gratuito da brapi.dev, os preços da sua lista e da carteira passam a vir ao vivo e são renovados sozinhos a cada 5 minutos.');
+      'Sem token, o app mostra o preço do dia pelo Yahoo, renovado sozinho a cada 15 minutos durante o pregão. Com o token gratuito da brapi.dev, o preço fica mais próximo do tempo real.');
     s(C_F, 'config', 'card:Backup', 'Backup',
       'Seus registros ficam só neste aparelho. Exporte um backup de vez em quando.');
     return p;
