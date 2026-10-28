@@ -864,6 +864,11 @@ def cmd_teste():
     ent, nts = read_csv(ENTRADA), notas()
     ativos = json.loads((OUT / "ativos.json").read_text(encoding="utf-8"))
     assert {r["ticker"] for r in ent} == set(nts) == {a["ticker"] for a in ativos}, "tickers divergem"
+    # CSV salvo por editor/planilha com ';' e ',' misturados perde colunas e corta textos: toda linha precisa ter todas as colunas
+    cols = ["ticker", "nome", "segmento", "confianca", "sinal", "tese", "risco", "nota", "travar"]
+    for t, n in nts.items():
+        assert list(n.keys()) == cols and all(v is not None for v in n.values()), f"notas_ativos.csv: linha de {t} com colunas faltando ou sobrando"
+        assert n["sinal"] in SINAIS_OK, f"notas_ativos.csv: sinal invalido em {t}: {n['sinal']}"
     for a in ativos:
         assert 0 <= a["score"] <= 1000
         assert abs(sum(a[k] or 0 for k in ("p1", "p2", "p3", "p4")) - a["score"]) < 0.5, a["ticker"]
