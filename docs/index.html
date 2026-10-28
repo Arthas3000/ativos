@@ -5,65 +5,78 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Painel B3</title>
 <meta name="description" content="Score de oportunidades em ações e FIIs da B3. Material educacional.">
-<meta name="theme-color" content="#1f3a34">
+<meta name="theme-color" content="#0f172a">
 <script>try{var t=(JSON.parse(localStorage.getItem('pb-ui-v1'))||{}).tema;if(t==='claro'||t==='escuro')document.documentElement.setAttribute('data-tema',t)}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Painel B3">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&display=swap">
 <style>
-  /* Tokens equivalentes aos do painel no Claude, para a mesma página rodar fora dele */
+  /* ===== Tokens =====
+     Paleta e proporções do MyFinance (Tailwind slate): fundo slate-50, cartão branco, borda slate-200,
+     destaque azul, entradas verde e saídas vermelho. Os nomes antigos (--color-*, --c0…) continuam valendo
+     para todos os módulos; só os valores mudaram. Textos pequenos usam tons um degrau mais escuros
+     (azul-600, verde-700, vermelho-600) para manter contraste AA; os preenchimentos usam a cor da referência. */
   :root {
-    --color-bg: #f6f7f5; --color-panel: #ffffff; --color-fg: #18201d; --color-fg-muted: #5d6863;
-    --color-border-line: #dde2df; --color-ok: #1d7a4f; --color-warn: #a35f00; --color-bad: #b4322a;
-    --c0: #1f6f5c; --c1: #c2702b; --c2: #4a6fa5; --c3: #8a5aa8; --c4: #b0466a; --c5: #2f8f9d; --c6: #7a8a2b; --c7: #6b5b4b;
-    --cds-chart-grid: #e8ebe9; --cds-chart-axis: #c4cac7; --cds-chart-reference: #8b9590; --cds-chart-muted: #b8c0bc;
-    --cds-chart-status-critical: #c0392b; --cds-surface-popover: #ffffff; --cds-border: #d4dad7;
-    --cds-shadow-popover: 0 4px 16px rgb(20 30 25 / .12); --cds-text-secondary: #5d6863;
+    --color-bg: #f8fafc; --color-panel: #ffffff; --color-fg: #0f172a; --color-fg-muted: #64748b;
+    --color-border-line: #e2e8f0; --color-ok: #047857; --color-warn: #b45309; --color-bad: #dc2626;
+    --orange: #c2410c; --accent: #3b82f6; --accent-ink: #2563eb; --accent-soft: #eff6ff; --soft: #f1f5f9; --field-border: #7c8aa0;
+    --c0: #2563eb; --c1: #f59e0b; --c2: #6366f1; --c3: #8b5cf6; --c4: #ec4899; --c5: #06b6d4; --c6: #84cc16; --c7: #64748b;
+    --cds-chart-grid: #e2e8f0; --cds-chart-axis: #cbd5e1; --cds-chart-reference: #7c8aa0; --cds-chart-muted: #94a3b8;
+    --cds-chart-status-critical: #dc2626; --cds-surface-popover: #ffffff; --cds-border: #cbd5e1;
+    --cds-shadow-popover: 0 10px 25px rgb(15 23 42 / .15); --cds-text-secondary: #64748b;
+    --shadow-sm: 0 1px 2px rgb(15 23 42 / .06); --shadow-bar: 0 -4px 6px -1px rgb(15 23 42 / .06);
     --cds-gap-xs: .25rem; --cds-gap-sm: .5rem; --cds-gap-md: .875rem; --cds-gap-lg: 1.25rem; --cds-gap-xl: 2rem;
     --cds-pad-xs: .25rem; --cds-pad-sm: .5rem; --cds-pad-md: .75rem; --cds-pad-lg: 1rem; --cds-pad-xl: 1.5rem;
     --cds-radius: .5rem; --cds-font-size-caption: .8125rem; --cds-font-size-body: .9375rem;
-    --cds-font-size-heading: 1.0625rem; --cds-font-size-title: 1.75rem; --cds-font-weight-medium: 500;
+    --cds-font-size-heading: 1.0625rem; --cds-font-size-title: 1.875rem; --cds-font-weight-medium: 600;
     --cds-dur-slow: .3s; --cds-ease-out: cubic-bezier(.2, .8, .2, 1);
-    --font-anthropic-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --font-anthropic-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --font-anthropic-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-anthropic-serif: var(--font-anthropic-sans);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-tema="claro"]) {
-      --color-bg: #111614; --color-panel: #1a211e; --color-fg: #e8ece9; --color-fg-muted: #9aa5a0;
-      --color-border-line: #2c3531; --color-ok: #5cc795; --color-warn: #e0a54a; --color-bad: #f07a70;
-      --c0: #5cc0a6; --c1: #e79a55; --c2: #86a8dc; --c3: #bb8fd6; --c4: #e07a9c; --c5: #5ec2cf; --c6: #b5c457; --c7: #b9a58f;
-      --cds-chart-grid: #232b28; --cds-chart-axis: #3a4440; --cds-chart-reference: #7d8883; --cds-chart-muted: #4e5a55;
-      --cds-chart-status-critical: #f07a70; --cds-surface-popover: #222a27; --cds-border: #36403c;
-      --cds-shadow-popover: 0 4px 16px rgb(0 0 0 / .5); --cds-text-secondary: #9aa5a0; color-scheme: dark;
+      --color-bg: #0f172a; --color-panel: #1e293b; --color-fg: #f1f5f9; --color-fg-muted: #94a3b8;
+      --color-border-line: #334155; --color-ok: #34d399; --color-warn: #fbbf24; --color-bad: #f87171;
+      --orange: #fb923c; --accent: #60a5fa; --accent-ink: #60a5fa; --accent-soft: rgb(30 58 138 / .3); --soft: #293548; --field-border: #64748b;
+      --c0: #3b82f6; --c1: #fbbf24; --c2: #818cf8; --c3: #a78bfa; --c4: #f472b6; --c5: #22d3ee; --c6: #a3e635; --c7: #94a3b8;
+      --cds-chart-grid: #1e293b; --cds-chart-axis: #475569; --cds-chart-reference: #64748b; --cds-chart-muted: #64748b;
+      --cds-chart-status-critical: #f87171; --cds-surface-popover: #1e293b; --cds-border: #475569;
+      --cds-shadow-popover: 0 10px 25px rgb(0 0 0 / .5); --cds-text-secondary: #94a3b8;
+      --shadow-sm: 0 1px 2px rgb(0 0 0 / .4); --shadow-bar: 0 -4px 6px -1px rgb(0 0 0 / .3); color-scheme: dark;
     }
   }
   :root[data-tema="escuro"] {
-      --color-bg: #111614; --color-panel: #1a211e; --color-fg: #e8ece9; --color-fg-muted: #9aa5a0;
-      --color-border-line: #2c3531; --color-ok: #5cc795; --color-warn: #e0a54a; --color-bad: #f07a70;
-      --c0: #5cc0a6; --c1: #e79a55; --c2: #86a8dc; --c3: #bb8fd6; --c4: #e07a9c; --c5: #5ec2cf; --c6: #b5c457; --c7: #b9a58f;
-      --cds-chart-grid: #232b28; --cds-chart-axis: #3a4440; --cds-chart-reference: #7d8883; --cds-chart-muted: #4e5a55;
-      --cds-chart-status-critical: #f07a70; --cds-surface-popover: #222a27; --cds-border: #36403c;
-      --cds-shadow-popover: 0 4px 16px rgb(0 0 0 / .5); --cds-text-secondary: #9aa5a0; color-scheme: dark;
+    --color-bg: #0f172a; --color-panel: #1e293b; --color-fg: #f1f5f9; --color-fg-muted: #94a3b8;
+    --color-border-line: #334155; --color-ok: #34d399; --color-warn: #fbbf24; --color-bad: #f87171;
+    --orange: #fb923c; --accent: #60a5fa; --accent-ink: #60a5fa; --accent-soft: rgb(30 58 138 / .3); --soft: #293548; --field-border: #64748b;
+    --c0: #3b82f6; --c1: #fbbf24; --c2: #818cf8; --c3: #a78bfa; --c4: #f472b6; --c5: #22d3ee; --c6: #a3e635; --c7: #94a3b8;
+    --cds-chart-grid: #1e293b; --cds-chart-axis: #475569; --cds-chart-reference: #64748b; --cds-chart-muted: #64748b;
+    --cds-chart-status-critical: #f87171; --cds-surface-popover: #1e293b; --cds-border: #475569;
+    --cds-shadow-popover: 0 10px 25px rgb(0 0 0 / .5); --cds-text-secondary: #94a3b8;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / .4); --shadow-bar: 0 -4px 6px -1px rgb(0 0 0 / .3); color-scheme: dark;
   }
   :root[data-tema="claro"] { color-scheme: light; }
-  }
+
+  /* ===== Base ===== */
   html { -webkit-text-size-adjust: 100%; }
-  /* As abas usam o atributo hidden; .pb-page { display: grid } o anularia fora do Claude */
   [hidden] { display: none !important; }
-  body { margin: 0; background: var(--color-bg); color: var(--color-fg); font: var(--cds-font-size-body)/1.5 var(--font-anthropic-sans); -webkit-tap-highlight-color: transparent; }
-  .app-bar { position: sticky; top: 0; z-index: 5; background: var(--color-bg); border-bottom: 1px solid var(--color-border-line);
-    padding: calc(env(safe-area-inset-top, 0px) + .5rem) max(16px, env(safe-area-inset-right, 0px)) .5rem max(16px, env(safe-area-inset-left, 0px));
-    display: flex; gap: .75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-  .app-bar small { color: var(--color-fg-muted); }
-  .app-btn { font: inherit; font-size: var(--cds-font-size-caption); text-decoration: none; color: var(--color-fg);
-    border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: .4rem .7rem; background: var(--color-panel); }
-  .app-btn:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
-  #dash-root { padding: 1rem max(16px, env(safe-area-inset-right, 0px)) calc(2rem + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); max-width: 1200px; margin-inline: auto; }
+  body { margin: 0; background: var(--color-bg); color: var(--color-fg); font: var(--cds-font-size-body)/1.5 var(--font-anthropic-sans); -webkit-tap-highlight-color: transparent; transition: background-color .3s, color .3s; }
+  :focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+
+  /* ===== Barra superior (sticky, branca, borda inferior): título em caixa-alta itálica + ações, e uma segunda linha com as áreas ===== */
+  .app-bar { position: sticky; top: 0; z-index: 30; background: var(--color-panel); border-bottom: 1px solid var(--color-border-line); box-shadow: var(--shadow-sm);
+    padding: calc(env(safe-area-inset-top, 0px) + .75rem) max(16px, env(safe-area-inset-right, 0px), calc((100% - 1280px) / 2 + 16px)) .5rem max(16px, env(safe-area-inset-left, 0px), calc((100% - 1280px) / 2 + 16px));
+    display: flex; gap: .5rem .75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .app-brand b { font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: -.05em; font-size: 1.125rem; }
+  .app-brand small { color: var(--color-fg-muted); font-size: .75rem; }
+  .app-btn { font: inherit; font-size: var(--cds-font-size-caption); font-weight: 600; text-decoration: none; color: var(--color-fg-muted);
+    border: 0; border-radius: 999px; padding: .5rem .75rem; background: none; }
+  .app-btn:hover { color: var(--accent-ink); background: var(--soft); }
+  #dash-root { padding: 1.5rem max(16px, env(safe-area-inset-right, 0px)) calc(2rem + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); max-width: 1280px; margin-inline: auto; }
   .dash-skeleton { color: transparent !important; background: var(--cds-chart-grid); border-radius: 4px; min-height: 1em; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
@@ -406,6 +419,45 @@ dash.onData(() => {
 });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
+<style id="ui-ref">
+  /* ===== Componentes no estilo do MyFinance (sobrepõem o CSS do painel; valem só no app, não no artifact do Claude) ===== */
+  /* Título da página: grande, preto, itálico */
+  .pb .pb-title, .inv-head h1 { font-family: var(--font-anthropic-sans); font-weight: 900; font-style: italic; letter-spacing: -.05em; font-size: clamp(1.75rem, 5vw, 2.25rem); line-height: 1.1; color: var(--color-fg); }
+  .pb .pb-lede, .inv-head p { color: var(--color-fg-muted); }
+  /* Cartões: rounded-2xl, borda slate-200, sombra leve */
+  .pb .pb-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: 1rem; box-shadow: var(--shadow-sm); padding: 1.25rem; }
+  /* Cabeçalho de cartão: rótulo pequeno em caixa-alta itálica com espaçamento largo (como "Novo lançamento" na referência) */
+  .pb .pb-card > h2, .pb .pb-card > h3 { font-size: .75rem; font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: .1em; color: var(--color-fg-muted); }
+  .pb .pb-label { text-transform: uppercase; font-size: .6875rem; font-weight: 700; font-style: italic; letter-spacing: .06em; }
+  .pb .pb-big { font-family: var(--font-anthropic-sans); font-weight: 800; font-size: 1.5rem; letter-spacing: -.02em; line-height: 1.2; }
+  .pb .pb-tiles > .pb-card { padding: 1rem; }
+  /* Abas e seções: pílulas rounded-xl; ativa = texto azul sobre fundo azul claro */
+  .pb nav.pb-tabs, .inv-sub { border: 0; }
+  .pb .pb-tab, .inv-sub-tab { background: none; border: 0; border-radius: .75rem; color: var(--color-fg-muted); font-weight: 700; font-size: .8125rem; padding: .5rem .875rem; }
+  .pb .pb-tab:hover, .inv-sub-tab:hover { background: var(--soft); color: var(--color-fg); border: 0; }
+  .pb .pb-tab[aria-selected="true"], .pb .inv-sub-tab[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); border: 0; }
+  .inv-sub-n { border-color: currentColor; }
+  /* Botões: primário azul preenchido (rounded-xl, negrito); demais em cinza claro como "Nova" na referência */
+  .pb-btn { background: var(--soft); border: 0; color: var(--color-fg); font-weight: 700; border-radius: .5rem; padding: .5rem .875rem; }
+  .pb-btn:hover { filter: brightness(.96); }
+  .pb-btn[aria-pressed="true"], .inv-page .pb-btn[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border: 0; }
+  .pb-btn.inv-pri, .pb-btn.pb-btn-primary { background: var(--c0); color: #fff; border: 0; border-radius: .75rem; box-shadow: var(--shadow-sm); min-height: 2.75rem; }
+  .pb-btn.inv-pri:hover { filter: brightness(1.08); }
+  .pb-btn.inv-perigo { background: var(--soft); color: var(--color-bad); border: 0; }
+  /* Campos: rounded-lg; a borda é mais escura que a da referência para manter 3:1 de contraste (WCAG 1.4.11) */
+  .pb .pb-in { background: var(--color-panel); border: 1px solid var(--field-border); border-radius: .5rem; min-height: 2.5rem; padding: .5rem .75rem; }
+  .pb .pb-in:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+  .pb .pb-in:disabled { background: var(--soft); border-style: dashed; }
+  /* Tabelas: cabeçalho pequeno em caixa-alta itálica sobre fundo slate-50, linhas separadas por fio fino */
+  .pb-table th { background: var(--color-bg); color: var(--color-fg-muted); font-size: .6875rem; font-weight: 800; font-style: italic; text-transform: uppercase; letter-spacing: .06em; }
+  .pb-table td, .pb-table th { border-bottom-color: var(--color-border-line); padding: .5rem .75rem; }
+  .pb-table tbody tr:hover { background: var(--color-bg); }
+  .pb-tablewrap { border-radius: .75rem; }
+  /* Chips e barras */
+  .pb-chip, .inv-chip { font-weight: 700; font-size: .75rem; }
+  .pb-bar { border-radius: 999px; }
+  .pb-note, .pb-disc { color: var(--color-fg-muted); }
+</style>
 <script>
 window.PB = (() => {
   const nf = (d) => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d });

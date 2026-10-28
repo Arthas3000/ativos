@@ -55,11 +55,13 @@
   var css = [
     'html[data-modo="facil"] [data-so-avancado]{display:none!important}',
     'html[data-modo="avancado"] [data-so-facil]{display:none!important}',
-    '.inv-modo{display:inline-flex;gap:.15rem;padding:.15rem;background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:999px}',
-    '.inv-modo button{font:inherit;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);background:none;border:0;border-radius:999px;padding:.3rem .8rem;min-height:2rem;cursor:pointer;white-space:nowrap}',
+    '.inv-modo{display:inline-flex;gap:.125rem;padding:.25rem;background:var(--soft);border:1px solid var(--color-border-line);border-radius:.75rem}',
+    '.inv-modo button{font:inherit;font-size:.8125rem;font-weight:700;color:var(--color-fg-muted);background:none;border:0;border-radius:.5rem;padding:.375rem .875rem;min-height:2rem;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s}',
     '.inv-modo button:hover{color:var(--color-fg)}',
-    '.inv-modo button[aria-checked="true"]{background:var(--c0);color:var(--color-bg);font-weight:500}',
-    '.inv-modo button:focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}',
+    '.inv-modo button[aria-checked="true"]{background:var(--color-panel);color:var(--accent-ink);box-shadow:var(--shadow-sm)}',
+    '.inv-modo button:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}',
+    '.inv-tema{padding:.5rem!important;border-radius:999px!important}',
+    '.inv-tema svg{width:1.25rem;height:1.25rem}',
     '.inv-chip{display:inline-flex;align-items:center;gap:.35rem;border:1px solid currentColor;border-radius:999px;padding:.1rem .65rem;font-size:var(--cds-font-size-caption);font-weight:500;white-space:nowrap}',
     '.inv-chip.baixo,.inv-chip.baixa{color:var(--color-ok)}',
     '.inv-chip.moderado,.inv-chip.moderada{color:var(--color-warn)}',
@@ -73,6 +75,9 @@
     '.inv-faixa{display:flex;flex-wrap:wrap;gap:.4rem 1.5rem}',
     '.inv-ez .m{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
     '.inv-ez td{vertical-align:top}',
+    '.inv-ind-sm{display:none}',
+    '@media (max-width:640px){.inv-ind-sm{display:block;margin:.25rem 0}}',
+    '.inv-ez td.l{white-space:normal;min-width:12rem}',
     '.inv-link{font:inherit;font-weight:600;background:none;border:0;padding:0;color:var(--color-fg);text-decoration:underline;cursor:pointer;min-height:1.75rem}',
     '.inv-link:focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}',
     '.inv-resumo-lista{display:grid;gap:0;list-style:none;margin:0;padding:0}',
@@ -81,7 +86,7 @@
     '.inv-resumo-lista .l{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}',
     '.inv-resumo-lista .m{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
     '.inv-modo-aviso{margin:0;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}',
-    '@media (max-width:640px){.inv-tema .inv-tema-t{display:none}.inv-modo button{padding:.3rem .5rem}.app-actions{gap:.25rem;flex:none}.app-actions .app-btn{padding:.35rem .45rem}.app-actions .app-btn svg{display:none}.app-brand{flex:1 1 0;overflow:hidden}.app-brand small{display:none}}'
+    '@media (max-width:640px){.inv-modo button{padding:.375rem .75rem}.app-brand{flex:1 1 0;overflow:hidden}.app-brand small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}'
   ].join('\n');
   var st = document.createElement('style'); st.id = 'inv-modo-css'; st.textContent = css; document.head.appendChild(st);
 
@@ -99,19 +104,27 @@
     if (!alvo) return;
     ev.preventDefault(); definir(alvo, true); btn[alvo].focus();
   });
-  var acoes = barra && barra.querySelector('.app-actions');
-  if (acoes) acoes.insertBefore(grupo, acoes.firstChild); else if (barra) barra.appendChild(grupo); else raiz.insertBefore(grupo, raiz.firstChild);
+  var acoes = barra && barra.querySelector('.app-actions'), linha2 = barra && barra.querySelector('.app-row2');
+  if (linha2) linha2.appendChild(grupo); else if (acoes) acoes.insertBefore(grupo, acoes.firstChild); else raiz.insertBefore(grupo, raiz.firstChild);
   /* ---------- tema claro / escuro (sem escolha, segue o sistema) ---------- */
   var mq = W.matchMedia ? W.matchMedia('(prefers-color-scheme: dark)') : null;
   var escuroAgora = function () {
     var t = document.documentElement.getAttribute('data-tema');
     return t === 'escuro' || (t !== 'claro' && !!(mq && mq.matches));
   };
+  function icone(d) {
+    var NS = 'http://www.w3.org/2000/svg', v = document.createElementNS(NS, 'svg'), t = document.createElementNS(NS, 'path');
+    v.setAttribute('viewBox', '0 0 24 24'); v.setAttribute('aria-hidden', 'true'); v.setAttribute('focusable', 'false');
+    t.setAttribute('d', d); t.setAttribute('fill', 'none'); t.setAttribute('stroke', 'currentColor'); t.setAttribute('stroke-width', '2');
+    t.setAttribute('stroke-linecap', 'round'); t.setAttribute('stroke-linejoin', 'round'); v.appendChild(t); return v;
+  }
   var btnTema = h('button', { type: 'button', class: 'app-btn inv-tema', 'aria-pressed': 'false' });
   function rotTema() {
     var e = escuroAgora();
     btnTema.setAttribute('aria-pressed', String(e));
-    btnTema.replaceChildren(h('span', { 'aria-hidden': 'true' }, e ? '☾' : '☀'), h('span', { class: 'inv-tema-t' }, e ? ' Escuro' : ' Claro'));
+    btnTema.replaceChildren(icone(e
+      ? 'M12 3v2M12 19v2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M3 12h2M19 12h2M5.6 18.4 7 17M17 7l1.4-1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'
+      : 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'));
     btnTema.setAttribute('aria-label', e ? 'Tema escuro ativo. Mudar para o claro' : 'Tema claro ativo. Mudar para o escuro');
     btnTema.title = e ? 'Mudar para o tema claro' : 'Mudar para o tema escuro';
     var meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.setAttribute('content', e ? '#111614' : '#1f3a34');
@@ -124,7 +137,7 @@
     try { PB.redraw(); } catch (e) { /* ok */ }
   });
   if (mq && mq.addEventListener) mq.addEventListener('change', rotTema);
-  if (acoes) acoes.insertBefore(btnTema, grupo.nextSibling); else if (barra) barra.appendChild(btnTema);
+  if (acoes) acoes.insertBefore(btnTema, acoes.firstChild); else if (barra) barra.appendChild(btnTema);
   rotTema();
   var anuncio = h('div', { class: 'inv-sr', role: 'status', 'aria-live': 'polite' });
   document.body.appendChild(anuncio);
@@ -198,7 +211,10 @@
     'risco-rendimento': ['Atenção ao rendimento', 'O rendimento pode não se sustentar.'],
     'armadilha': ['Evitar (armadilha)', 'Parece barato, mas os fundamentos pioram.']
   };
-  var corInd = function (sinal) { return sinal === 'neutro' ? 'var(--color-fg-muted)' : PB.sinalColor(sinal); };
+  // cor da indicação: significado fixo (verde = candidata, âmbar = cautela, azul = boa sem desconto, laranja = rendimento, vermelho = evitar)
+  var TOM = { 'oportunidade': 'var(--color-ok)', 'oportunidade-com-risco': 'var(--color-warn)', 'qualidade-sem-margem': 'var(--accent-ink)',
+    'neutro': 'var(--color-fg-muted)', 'risco-rendimento': 'var(--orange)', 'armadilha': 'var(--color-bad)' };
+  var corInd = function (sinal) { return TOM[sinal] || PB.sinalColor(sinal); };
   var indicacao = function (sinal) { return (INDICACAO[sinal] || [PB.sinalName(sinal), ''])[0]; };
   var CANDIDATAS = ['oportunidade', 'oportunidade-com-risco'];
   var filtroFacil = { classe: '', soCompra: false };
@@ -256,13 +272,14 @@
       h('input', { type: 'checkbox', checked: filtroFacil.soCompra, onchange: function (e) { filtroFacil.soCompra = e.target.checked; desenharResumo(); } }),
       h('span', null, 'Só candidatas à compra')));
     var linhasT = filtrados.map(function (a) {
-      var cor = PB.sinalColor(a.sinal), corTxt = corInd(a.sinal);
+      var cor = corInd(a.sinal), corTxt = cor;
       return h('tr', null,
         h('td', { class: 'l' },
           h('button', { type: 'button', class: 'inv-link', onclick: function () { PB.openAtivo(a.ticker); }, 'aria-label': 'Abrir ficha de ' + a.ticker }, a.ticker), ' ', h('span', { class: 'm' }, a.nome),
+          h('div', { class: 'inv-ind-sm' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt }, indicacao(a.sinal))),
           h('div', { class: 'm' }, 'Risco: ' + (a.risco || '—'))),
         h('td', null, h('b', null, num(a.score / 100, 1)), h('span', { class: 'pb-bar', style: 'width:' + (a.score / 1000 * 3) + 'rem;background:' + cor, 'aria-hidden': 'true' })),
-        h('td', { class: 'l' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt, title: (INDICACAO[a.sinal] || [])[1] || '' }, indicacao(a.sinal))),
+        h('td', { class: 'l pb-hide-sm' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt, title: (INDICACAO[a.sinal] || [])[1] || '' }, indicacao(a.sinal))),
         h('td', { class: 'pb-hide-sm' }, 'R$ ' + num(a.preco_atual, 2)));
     });
     var cTab = h('div', { class: 'pb-card' },
@@ -271,7 +288,7 @@
       chips,
       h('p', { class: 'pb-note', role: 'status', 'aria-live': 'polite' }, filtrados.length + ' de ' + A.length + ' ativos'),
       filtrados.length ? h('div', { class: 'pb-tablewrap' }, h('table', { class: 'pb-table inv-ez' }, h('caption', { class: 'inv-sr' }, 'Notas e indicação dos ativos'),
-        h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'l' }, 'Ativo e risco'), h('th', { scope: 'col' }, 'Nota'), h('th', { scope: 'col', class: 'l' }, 'Indicação'), h('th', { scope: 'col', class: 'pb-hide-sm' }, 'Preço'))),
+        h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'l' }, 'Ativo e risco'), h('th', { scope: 'col' }, 'Nota'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Indicação'), h('th', { scope: 'col', class: 'pb-hide-sm' }, 'Preço'))),
         h('tbody', null, linhasT)))
         : h('p', { class: 'pb-note' }, 'Nenhum ativo com esse filtro. Escolha "Todos" ou desmarque "Só candidatas à compra".'),
       h('p', { class: 'pb-disc' }, 'A indicação é uma leitura automática da classificação do modelo (desconto, solidez, qualidade e proventos), com base nos dados de ' + dt(p.data_ref) + '. Não é recomendação de compra ou venda: confira o risco de cada ativo e a ficha antes de decidir.'));
