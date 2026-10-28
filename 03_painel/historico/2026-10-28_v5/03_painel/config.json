@@ -1,0 +1,15 @@
+{
+  "versao": "v5",
+  "data_versao": "2026-10-28",
+  "data_ref": "2026-10-27",
+  "data_1m": "2026-09-25",
+  "data_1s": "2026-10-20",
+  "evento": "2º turno presidencial de 25/10/2026",
+  "data_pre_estresse": "2026-10-23",
+  "data_estresse": "2026-10-26",
+  "macro_csv": "dados/snapshot_mercado_2026-10-26.csv",
+  "painel_url": "https://claude.ai/artifact/CDQrUB1RafE6HBQBGwfMaj",
+  "github_repo": "Arthas3000/ativos",
+  "app_url": "https://arthas3000.github.io/ativos/",
+  "extras": []
+}
