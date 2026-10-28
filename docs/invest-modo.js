@@ -583,6 +583,156 @@
     INV.aoMostrar('catalogo', desenhar);
   })();
 
+  /* ---------- Adicionar ativo: o usuário digita só o código; o GitHub Actions busca os dados e calcula (dados/extras.json) ---------- */
+  (function () {
+    var pg = h('section', { class: 'pb-page', id: 'adicionar', 'data-page': 'adicionar', hidden: true });
+    var ref = raiz.querySelector('[data-page="precos"]') || raiz.querySelector('[data-page="macro"]');
+    raiz.insertBefore(pg, ref || null);
+    var bt = h('button', { class: 'pb-tab', role: 'tab', 'data-tab': 'adicionar', 'aria-selected': 'false' }, 'Adicionar ativo');
+    bt.addEventListener('click', function () { PB.show('adicionar'); });
+    var tabCat = nav.querySelector('[data-tab="precos"]') || nav.querySelector('[data-tab="macro"]');
+    nav.insertBefore(bt, tabCat || null);
+    var ab = NAV.grupos[0].abas; ab.splice(ab.indexOf('precos') < 0 ? ab.length : ab.indexOf('precos'), 0, 'adicionar');
+
+    var dados = null, erro = null, carregando = false, msg = null, abertos = {};
+    var upd = document.getElementById('app-update');
+    var repo = ((upd && upd.href || '').match(/github\.com\/([^/]+\/[^/]+)\/actions/) || [])[1] || '';
+    function carregar(forcar) {
+      if ((dados && !forcar) || carregando) return; carregando = true;
+      fetch((W.PB_BASE || '') + 'dados/extras.json', { cache: 'no-cache' })
+        .then(function (r) { if (r.status === 404) return { fichas: [], falhas: {} }; if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (d) { dados = d; erro = null; }).catch(function (e) { erro = String(e); })
+        .then(function () { carregando = false; desenhar(); });
+    }
+    var pend = function () { var u = lerPref(); return u.pendentes && typeof u.pendentes === 'object' ? u.pendentes : {}; };
+    function validar(texto) {
+      var partes = String(texto || '').split(/[\s,;]+/).filter(Boolean), ok = [], erros = [];
+      var ranking = {}; try { dash.data('ativos').data.forEach(function (a) { ranking[a.ticker] = 1; }); } catch (e) { /* ok */ }
+      var jaTem = {}; ((dados && dados.fichas) || []).forEach(function (f) { jaTem[f.ticker] = 1; });
+      partes.forEach(function (p) {
+        var v = C.validarTicker(p);
+        if (!v.ok) { erros.push(p + ': ' + v.erro); return; }
+        if (ranking[v.ticker]) { erros.push(v.ticker + ' já está no ranking.'); return; }
+        if (jaTem[v.ticker]) { erros.push(v.ticker + ' já foi adicionado.'); return; }
+        if (ok.indexOf(v.ticker) < 0) ok.push(v.ticker);
+      });
+      if (!partes.length) erros.push('Digite o código do ativo (ex.: PRIO3).');
+      if (ok.length + Object.keys(jaTem).length > 30) erros.push('O limite é de 30 ativos adicionados.');
+      return { ok: ok, erros: erros };
+    }
+    function pedir(lista) {
+      var url = 'https://github.com/' + repo + '/issues/new?title=' + encodeURIComponent('Adicionar ativo: ' + lista.join(', ')) +
+        '&body=' + encodeURIComponent('Pedido feito pelo app. Basta clicar em "Submit new issue": o GitHub Actions busca preços e fundamentos, calcula a nota e atualiza o app em alguns minutos.');
+      gravarPref(function (u) { var p = (u.pendentes && typeof u.pendentes === 'object') ? u.pendentes : {}; lista.forEach(function (t) { p[t] = new Date().toISOString().slice(0, 10); }); u.pendentes = p; });
+      W.open(url, '_blank', 'noopener');
+    }
+
+    function grafico(serie, nome) {
+      if (!serie || serie.length < 2) return h('p', { class: 'pb-note' }, 'Sem série de preços para o gráfico.');
+      var NS = 'http://www.w3.org/2000/svg', W0 = 600, H0 = 170, mL = 8, mR = 8, mT = 8, mB = 20;
+      var ps = serie.map(function (x) { return x[1]; }), lo = Math.min.apply(null, ps), hi = Math.max.apply(null, ps), sp = hi - lo || 1;
+      var X = function (i) { return mL + i / (serie.length - 1) * (W0 - mL - mR); }, Y = function (v) { return mT + (1 - (v - lo) / sp) * (H0 - mT - mB); };
+      var svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + W0 + ' ' + H0); svg.setAttribute('role', 'img'); svg.setAttribute('width', '100%');
+      svg.setAttribute('aria-label', 'Preço semanal de ' + nome + ' de ' + dt(serie[0][0]) + ' a ' + dt(serie[serie.length - 1][0]) + ': de R$ ' + num(ps[0], 2) + ' a R$ ' + num(ps[ps.length - 1], 2) + '; mínimo R$ ' + num(lo, 2) + ' e máximo R$ ' + num(hi, 2) + '.');
+      var mk = function (tag, a, txt) { var e = document.createElementNS(NS, tag); Object.keys(a).forEach(function (k) { e.setAttribute(k, a[k]); }); if (txt) e.textContent = txt; svg.appendChild(e); };
+      mk('line', { x1: mL, x2: W0 - mR, y1: H0 - mB, y2: H0 - mB, stroke: 'var(--cds-chart-axis)' });
+      mk('path', { d: serie.map(function (x, i) { return (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(x[1]).toFixed(1); }).join(''), fill: 'none', stroke: 'var(--c0)', 'stroke-width': 2, 'stroke-linejoin': 'round' });
+      mk('text', { x: mL, y: H0 - 5, fill: 'var(--color-fg-muted)', 'font-size': 11 }, dt(serie[0][0]));
+      mk('text', { x: W0 - mR, y: H0 - 5, fill: 'var(--color-fg-muted)', 'font-size': 11, 'text-anchor': 'end' }, dt(serie[serie.length - 1][0]));
+      mk('text', { x: mL + 2, y: mT + 10, fill: 'var(--color-fg-muted)', 'font-size': 11 }, 'máx. R$ ' + num(hi, 2));
+      mk('text', { x: W0 - mR, y: mT + 10, fill: 'var(--color-fg-muted)', 'font-size': 11, 'text-anchor': 'end' }, 'mín. R$ ' + num(lo, 2));
+      return h('div', { class: 'pb-chart' }, svg);
+    }
+    var pc = function (x) { return x === null || x === undefined ? '—' : PB.sig(x, 1) + '%'; };
+    function detalhe(f, falhas) {
+      var m = f.metricas || {}, fu = f.fundamentos || {}, sc = f.score;
+      var avisos = ['Nota automática: mesmo modelo do ranking, só com dados públicos automáticos (Yahoo Finance e Fundamentus), sem os ajustes manuais do ranking. Não é recomendação.'];
+      if (sc && sc.tipo_assumido === 'geral') avisos.push('Tipo assumido: empresa comum (não banco, commodity nem incorporadora) e não estatal. Se for diferente, a nota pode mudar.');
+      if (sc && sc.status === 'provisorio') avisos.push('Dados incompletos (cobertura ' + num(sc.cobertura * 100, 0) + '%): o peso do que faltou foi redistribuído dentro de cada pilar.');
+      if (!sc && f.motivo) avisos.push('Sem nota: ' + f.motivo + '.');
+      if (f.aviso_preco) avisos.push('Atenção: ' + f.aviso_preco + '.');
+      if (falhas && falhas[f.ticker]) avisos.push('Falha na coleta: ' + falhas[f.ticker] + '.');
+      var tiles = h('div', { class: 'pb-tiles' },
+        tileX('Preço', 'R$ ' + num(m.preco, 2), m.data_preco ? 'fechamento de ' + dt(m.data_preco) : ''),
+        tileX('12 meses', pc(m.var_12m), '1 mês ' + pc(m.var_1m) + ' · 3 meses ' + pc(m.var_3m)),
+        tileX('Queda máxima', m.queda_max === undefined ? '—' : num(m.queda_max, 1) + '%', 'pior queda pico a vale em 5 anos (só preço)'));
+      var mais = h('div', { 'data-so-avancado': '1', class: 'inv-risco' },
+        h('h3', null, 'Indicadores'),
+        h('div', { class: 'pb-tablewrap' }, h('table', { class: 'pb-table' }, h('caption', { class: 'inv-sr' }, 'Indicadores de ' + f.ticker), h('tbody', null,
+          linhaTab('Oscilação anual (último ano)', m.vol_anual === null || m.vol_anual === undefined ? '—' : num(m.vol_anual, 1) + '%'),
+          linhaTab('Dividendos em 12 meses sobre o preço (Yahoo)', m.dy12_calc === null || m.dy12_calc === undefined ? '—' : num(m.dy12_calc, 2) + '%'),
+          linhaTab('Div. yield (Fundamentus)', fu.dy === null || fu.dy === undefined ? '—' : num(fu.dy, 2) + '%'),
+          linhaTab('P/L', num(fu.pl, 2)), linhaTab('P/VP', num(fu.pvp, 2)), linhaTab('ROIC', fu.roic === null || fu.roic === undefined ? '—' : num(fu.roic, 1) + '%'),
+          linhaTab('Margem líquida', fu.margem_liq === null || fu.margem_liq === undefined ? '—' : num(fu.margem_liq, 1) + '%'),
+          linhaTab('Variação no estresse (' + dt(dash.data('parametros').data[0].data_pre_estresse) + ' a ' + dt(dash.data('parametros').data[0].data_estresse) + ')', pc(m.var_estresse)),
+          sc ? linhaTab('Margem de segurança vs valor justo (só ações)', sc.ms === null || sc.ms === undefined ? '—' : PB.sig(sc.ms, 1) + '%') : null))),
+        sc ? h('p', { class: 'pb-note' }, 'Pilares (máx.): desconto ' + num(sc.p1, 0) + ' (300), solidez ' + num(sc.p2, 0) + ' (250), qualidade ' + num(sc.p3, 0) + ' (250), proventos ' + num(sc.p4, 0) + ' (200). Balanço de ' + (fu.balanco || '—') + '.') : null);
+      return h('div', { class: 'inv-risco' }, tiles, grafico(f.serie, f.ticker), mais, h('ul', { 'aria-label': 'Limitações desta nota' }, avisos.map(function (a) { return h('li', null, a); })));
+    }
+
+    function desenhar() {
+      if (PB.current !== 'adicionar') return;
+      if (!dados && !erro) { pg.replaceChildren(h('div', { class: 'pb-card', 'aria-live': 'polite' }, h('p', { class: 'pb-note' }, 'Carregando…'))); carregar(); return; }
+      var fichas = (dados && dados.fichas) || [], falhas = (dados && dados.falhas) || {};
+      var tem = {}; fichas.forEach(function (f) { tem[f.ticker] = 1; });
+      var input = h('input', { type: 'text', class: 'pb-in', id: 'add-ticker', placeholder: 'Ex.: PRIO3 ou PRIO3, TAEE11', autocomplete: 'off', autocapitalize: 'characters', 'aria-describedby': 'add-ajuda add-msg' });
+      var elMsg = h('div', { id: 'add-msg', role: 'status', 'aria-live': 'polite' });
+      var form = h('form', { class: 'pb-controls', novalidate: true },
+        h('label', { class: 'inv-sr', for: 'add-ticker' }, 'Código do ativo'), input, h('button', { type: 'submit', class: 'pb-btn inv-pri' }, 'Adicionar'));
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var v = validar(input.value);
+        if (v.erros.length) { elMsg.replaceChildren.apply(elMsg, v.erros.map(function (e) { return h('p', { class: 'pb-note warn' }, e); })); input.setAttribute('aria-invalid', 'true'); return; }
+        input.removeAttribute('aria-invalid');
+        if (!repo) { elMsg.replaceChildren(h('p', { class: 'pb-note warn' }, 'Não encontrei o endereço do repositório neste app; use o GitHub › Actions › Adicionar ativo.')); return; }
+        pedir(v.ok); input.value = '';
+        desenhar();
+      });
+      var pendentes = Object.keys(pend()).filter(function (t) { return !tem[t]; });
+      // pedidos que já viraram ficha saem da lista de pendentes
+      var limpos = Object.keys(pend()).filter(function (t) { return tem[t]; });
+      if (limpos.length) gravarPref(function (u) { limpos.forEach(function (t) { delete (u.pendentes || {})[t]; }); });
+      var cForm = h('div', { class: 'pb-card' },
+        h('h2', null, 'Adicionar ativo pelo código'),
+        h('p', { class: 'pb-text', id: 'add-ajuda' }, 'Digite só o código (ações, units ou FIIs da B3). O app abre um pedido no GitHub já preenchido: clique em "Submit new issue". Em poucos minutos o GitHub busca preços, histórico e fundamentos, calcula a nota e publica aqui. Você não edita arquivo nenhum.'),
+        form, elMsg,
+        pendentes.length ? h('div', null, h('p', { class: 'pb-note' }, 'Aguardando a atualização (pode levar alguns minutos; depois recarregue): '),
+          h('div', { class: 'pb-chips' }, pendentes.map(function (t) { return h('span', { class: 'pb-chip' }, t + ' · pedido em ' + dt(pend()[t])); })),
+          h('button', { type: 'button', class: 'pb-btn', onclick: function () { carregar(true); } }, 'Verificar agora')) : null,
+        h('p', { class: 'pb-note' }, 'Para remover ou adicionar vários de uma vez: GitHub › Actions › "Adicionar ativo" › Run workflow. Limite de 30 ativos adicionados.'));
+      var cLista;
+      if (erro) cLista = h('div', { class: 'pb-card' }, h('p', { class: 'pb-note warn' }, 'Não foi possível carregar os ativos adicionados (' + erro + ').'));
+      else if (!fichas.length) cLista = h('div', { class: 'pb-card' }, h('h2', null, 'Ativos adicionados'), h('p', { class: 'pb-note' }, 'Nenhum ativo adicionado ainda.'));
+      else {
+        var corpo = h('tbody');
+        fichas.forEach(function (f) {
+          var m = f.metricas || {}, sc = f.score, aberto = !!abertos[f.ticker];
+          var b = h('button', { type: 'button', class: 'inv-link', 'aria-expanded': String(aberto), 'aria-controls': 'add-d-' + f.ticker }, f.ticker);
+          var det = h('tr', { id: 'add-d-' + f.ticker, hidden: !aberto }, h('td', { class: 'l', colspan: '5', style: 'white-space:normal' }, detalhe(f, falhas)));
+          b.addEventListener('click', function () { abertos[f.ticker] = !abertos[f.ticker]; det.hidden = !abertos[f.ticker]; b.setAttribute('aria-expanded', String(!!abertos[f.ticker])); });
+          corpo.append(h('tr', null,
+            h('td', { class: 'l' }, b, ' ', h('span', { class: 'pb-note' }, f.nome), h('div', { class: 'pb-note' }, f.classe)),
+            h('td', null, sc ? h('b', null, h('span', { 'data-so-facil': '1' }, num(sc.total / 100, 1)), h('span', { 'data-so-avancado': '1' }, num(sc.total, 1))) : '—'),
+            h('td', { class: 'pb-hide-sm' }, m.preco === undefined ? '—' : 'R$ ' + num(m.preco, 2)),
+            h('td', { class: 'pb-hide-sm' }, pc(m.var_12m)),
+            h('td', { class: 'l' }, h('span', { class: 'inv-chip nd', style: 'color:' + (sc ? (sc.status === 'definitivo' ? 'var(--accent-ink)' : 'var(--color-warn)') : 'var(--color-fg-muted)') },
+              sc ? (sc.status === 'definitivo' ? 'Nota automática' : 'Nota parcial') : 'Sem nota'))), det);
+        });
+        cLista = h('div', { class: 'pb-card' },
+          h('h2', null, 'Ativos adicionados'),
+          h('p', { class: 'pb-note' }, 'Dados de ' + dt(dados.data_ref) + '. ', h('span', { 'data-so-facil': '1' }, 'Nota de 0 a 10. '), h('span', { 'data-so-avancado': '1' }, 'Score de 0 a 1000, o mesmo modelo do ranking. '), 'Toque no código para ver preço, gráfico e limitações.'),
+          h('div', { class: 'pb-tablewrap', style: 'max-height:none' }, h('table', { class: 'pb-table' }, h('caption', { class: 'inv-sr' }, 'Ativos adicionados'),
+            h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'l' }, 'Ativo'), h('th', { scope: 'col' }, 'Nota'), h('th', { scope: 'col', class: 'pb-hide-sm' }, 'Preço'), h('th', { scope: 'col', class: 'pb-hide-sm' }, '12 meses'), h('th', { scope: 'col', class: 'l' }, 'Situação'))), corpo)),
+          h('p', { class: 'pb-disc' }, (dados && dados.aviso) || ''));
+      }
+      pg.replaceChildren(cForm, cLista);
+      if (msg) msg = null;
+    }
+    INV.aoMostrar('adicionar', desenhar);
+    W.INVModo_extras = { recarregar: function () { carregar(true); } };
+  })();
+
   /* ---------- interface pública ---------- */
   W.INVModo = {
     atual: function () { return modo; },

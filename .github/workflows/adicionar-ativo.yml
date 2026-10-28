@@ -1,0 +1,66 @@
+# Adicionar (ou remover) ativos pelo código: busca preços (Yahoo) e fundamentos (Fundamentus), calcula a nota parcial e atualiza o app.
+# Dois jeitos de disparar, sem editar nenhum arquivo:
+#   1) No app: aba "Adicionar ativo" > digitar o código > abre uma issue já preenchida; basta clicar em "Submit new issue".
+#   2) Aqui no GitHub: Actions > "Adicionar ativo" > Run workflow > digitar os códigos.
+# A issue só é aceita se for aberta pelo dono do repositório (qualquer outra pessoa é ignorada).
+name: Adicionar ativo
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "Códigos separados por espaço ou vírgula (ex.: PRIO3 TAEE11)"
+        required: true
+      acao:
+        description: "O que fazer"
+        type: choice
+        options: [adicionar, remover]
+        default: adicionar
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: atualizar-painel
+  cancel-in-progress: false
+
+jobs:
+  adicionar:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (startsWith(github.event.issue.title, 'Adicionar ativo:') && github.event.issue.user.login == github.repository_owner)
+    runs-on: ubuntu-latest
+    env:
+      PEDIDO: ${{ github.event.inputs.tickers || github.event.issue.title }}
+      ACAO: ${{ github.event.inputs.acao || 'adicionar' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Adicionar e calcular
+        run: |
+          if [ "$ACAO" = "remover" ]; then python 03_painel/atualizar.py adicionar --remover "$PEDIDO"; else python 03_painel/atualizar.py adicionar "$PEDIDO"; fi
+          python 03_painel/atualizar.py historico
+          python 03_painel/atualizar.py extras
+          python 03_painel/atualizar.py teste
+          python 03_painel/atualizar.py site
+      - name: Gravar no repositório
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Ativos adicionados: $(echo "$PEDIDO" | tr -cd 'A-Za-z0-9 ,:')"
+          git push
+      - name: Avisar na issue
+        if: always() && github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTADO: ${{ job.status }}
+        run: |
+          if [ "$RESULTADO" = "success" ]; then MSG="Pronto. O ativo foi adicionado: em alguns minutos o GitHub Pages publica a nota, os preços e os gráficos. Recarregue o app."; else MSG="Não deu certo. Veja o log da execução em Actions. Causas comuns: código inexistente, limite de 30 ativos ou fonte de dados fora do ar."; fi
+          gh issue comment "${{ github.event.issue.number }}" --body "$MSG"
+          gh issue close "${{ github.event.issue.number }}"
