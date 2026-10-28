@@ -586,13 +586,13 @@
   /* ---------- Adicionar ativo: o usuário digita só o código; o GitHub Actions busca os dados e calcula (dados/extras.json) ---------- */
   (function () {
     var pg = h('section', { class: 'pb-page', id: 'adicionar', 'data-page': 'adicionar', hidden: true });
-    var ref = raiz.querySelector('[data-page="precos"]') || raiz.querySelector('[data-page="macro"]');
+    var ref = raiz.querySelector('[data-page="catalogo"]') || raiz.querySelector('[data-page="macro"]');
     raiz.insertBefore(pg, ref || null);
     var bt = h('button', { class: 'pb-tab', role: 'tab', 'data-tab': 'adicionar', 'aria-selected': 'false' }, 'Adicionar ativo');
     bt.addEventListener('click', function () { PB.show('adicionar'); });
-    var tabCat = nav.querySelector('[data-tab="precos"]') || nav.querySelector('[data-tab="macro"]');
+    var tabCat = nav.querySelector('[data-tab="catalogo"]') || nav.querySelector('[data-tab="macro"]');
     nav.insertBefore(bt, tabCat || null);
-    var ab = NAV.grupos[0].abas; ab.splice(ab.indexOf('precos') < 0 ? ab.length : ab.indexOf('precos'), 0, 'adicionar');
+    var ab = NAV.grupos[0].abas; ab.splice(ab.indexOf('catalogo') < 0 ? ab.length : ab.indexOf('catalogo'), 0, 'adicionar');
 
     var dados = null, erro = null, carregando = false, msg = null, abertos = {};
     var upd = document.getElementById('app-update');
