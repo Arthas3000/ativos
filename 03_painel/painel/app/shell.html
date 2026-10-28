@@ -108,7 +108,20 @@ window.dash = (() => {
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((data) => { src[id] = { status: 'ok', data, columns: data.length ? Object.keys(data[0]) : [] }; })
     .catch((e) => { src[id] = { status: 'error', data: [], message: String(e) }; })))
+    .then(juntarAdicionados)
     .then(notify);
+  // Ativos adicionados pelo usuário (dados/extras.json, gerado pelo GitHub Actions): entram nas MESMAS tabelas e gráficos dos 20 do ranking,
+  // no mesmo formato de ativos.json e precos.json. Sem o arquivo (ou sem nota calculável) nada muda.
+  function juntarAdicionados() {
+    return fetch(PB_BASE + 'dados/extras.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((ex) => {
+      if (!ex || !Array.isArray(ex.fichas) || src.ativos.status !== 'ok') return;
+      const ja = new Set(src.ativos.data.map((a) => a.ticker));
+      const novos = ex.fichas.filter((f) => f.ativo && !ja.has(f.ativo.ticker));
+      if (!novos.length) return;
+      src.ativos = Object.assign({}, src.ativos, { data: src.ativos.data.concat(novos.map((f) => f.ativo)) });
+      if (src.precos.status === 'ok') src.precos = Object.assign({}, src.precos, { data: src.precos.data.concat(...novos.map((f) => f.precos || [])) });
+    });
+  }
   let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(notify, 150); });
   load();
   return {

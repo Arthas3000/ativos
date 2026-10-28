@@ -271,7 +271,7 @@
   <section class="pb-page" id="precos" data-page="precos" hidden>
     <div class="pb-card">
       <h2>Preço em base 100 (<span data-source="parametros" data-field="data_1m" data-row="0" data-fmt="dm" data-v>—</span> = 100) contra o Ibovespa</h2>
-      <p class="pb-note">Mesma escala em todos os quadros. Linha cinza: Ibovespa. Cor da linha = classificação (legenda em Valor × queda). Tracejado vertical: dia do estresse. Ordem do ranking.</p>
+      <p class="pb-note">Mesma escala em todos os quadros. Linha cinza: Ibovespa. Cor da linha = classificação (legenda em Valor × queda). Tracejado vertical: dia do estresse. Ordem do ranking; ativos adicionados por você (*) vêm no fim.</p>
       <div class="pb-grid" id="multiples" data-source="precos ativos parametros" style="grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr))"></div>
     </div>
   </section>
@@ -399,7 +399,20 @@ window.dash = (() => {
     .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
     .then((data) => { src[id] = { status: 'ok', data, columns: data.length ? Object.keys(data[0]) : [] }; })
     .catch((e) => { src[id] = { status: 'error', data: [], message: String(e) }; })))
+    .then(juntarAdicionados)
     .then(notify);
+  // Ativos adicionados pelo usuário (dados/extras.json, gerado pelo GitHub Actions): entram nas MESMAS tabelas e gráficos dos 20 do ranking,
+  // no mesmo formato de ativos.json e precos.json. Sem o arquivo (ou sem nota calculável) nada muda.
+  function juntarAdicionados() {
+    return fetch(PB_BASE + 'dados/extras.json', { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null).then((ex) => {
+      if (!ex || !Array.isArray(ex.fichas) || src.ativos.status !== 'ok') return;
+      const ja = new Set(src.ativos.data.map((a) => a.ticker));
+      const novos = ex.fichas.filter((f) => f.ativo && !ja.has(f.ativo.ticker));
+      if (!novos.length) return;
+      src.ativos = Object.assign({}, src.ativos, { data: src.ativos.data.concat(novos.map((f) => f.ativo)) });
+      if (src.precos.status === 'ok') src.precos = Object.assign({}, src.precos, { data: src.precos.data.concat(...novos.map((f) => f.precos || [])) });
+    });
+  }
   let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(notify, 150); });
   load();
   return {
@@ -472,13 +485,17 @@ window.PB = (() => {
   const SINAL = {
     'oportunidade': ['Oportunidade', 0], 'oportunidade-com-risco': ['Oportunidade com risco', 1],
     'qualidade-sem-margem': ['Qualidade sem margem', 2], 'neutro': ['Neutro', -1],
-    'risco-rendimento': ['Risco no rendimento', 4], 'armadilha': ['Armadilha', -2]
+    'risco-rendimento': ['Risco no rendimento', 4], 'armadilha': ['Armadilha', -2],
+    'adicionado': ['Adicionado (nota automática)', -1]
   };
   const sinalColor = (s) => {
     const i = (SINAL[s] || ['', -1])[1];
     return i === -1 ? 'var(--cds-chart-muted)' : i === -2 ? 'var(--cds-chart-status-critical)' : dash.colors[i];
   };
   const sinalName = (s) => (SINAL[s] || [s])[0];
+  // ativos adicionados pelo usuário não têm posição no ranking: ficam depois dos curados e com '*' no rótulo
+  const byPos = (a, b) => (a.posicao ?? 1e9) - (b.posicao ?? 1e9);
+  const rot = (a) => a.posicao ? a.posicao + '. ' + a.ticker : a.ticker + '*';
   const PILARES = [['p1', 'P1 desconto', 300], ['p2', 'P2 solidez', 250], ['p3', 'P3 qualidade', 250], ['p4', 'P4 proventos', 200]];
   const visible = (el) => el && el.offsetParent !== null && el.clientWidth > 0;
   const tipFor = (box) => {
@@ -522,7 +539,7 @@ window.PB = (() => {
     dash.setLink(tab);
     PB.redraw();
   };
-  return { nf, f0, f1, f2, num, sig, cls, dataBR, SINAL, sinalColor, sinalName, PILARES, visible, tipFor, cleanAxis, state,
+  return { nf, f0, f1, f2, num, sig, cls, dataBR, SINAL, sinalColor, sinalName, byPos, rot, PILARES, visible, tipFor, cleanAxis, state,
     show, openAtivo, get current() { return current; }, get selected() { return selected; }, set selected(v) { selected = v; },
     draws: [], redraw() { PB.draws.forEach((fn) => fn()); } };
 })();
@@ -641,12 +658,12 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
   const drawRanking = () => {
     const box = document.getElementById('ranking-chart');
     if (!PB.visible(box) || !PB.state(box, 'ativos')) return;
-    const rows = [...dash.data('ativos').data].sort((a, b) => a.posicao - b.posicao);
+    const rows = [...dash.data('ativos').data].sort(PB.byPos);
     const W = box.clientWidth, rowH = 24;
     const svg = d3.create('svg').attr('width', '100%');
     const tmp = svg.append('g').append('text').style('font-size', 'var(--cds-font-size-caption)');
     document.body.appendChild(svg.node());
-    let ml = 0; rows.forEach((r) => { tmp.text(r.posicao + '. ' + r.ticker); ml = Math.max(ml, tmp.node().getComputedTextLength()); });
+    let ml = 0; rows.forEach((r) => { tmp.text(PB.rot(r)); ml = Math.max(ml, tmp.node().getComputedTextLength()); });
     svg.remove(); tmp.remove();
     const m = { l: ml + 12, r: 44, t: 8, b: 26 }, H = rows.length * rowH + m.t + m.b;
     svg.attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
@@ -671,7 +688,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
         .attr('fill', 'var(--color-fg)').style('font-size', 'var(--cds-font-size-caption)').text(PB.f0.format(r.score));
       svg.append('text').attr('x', m.l - 8).attr('y', y(r.ticker) + y.bandwidth() / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
         .attr('fill', PB.sinalColor(r.sinal) === 'var(--cds-chart-status-critical)' ? 'var(--color-bad)' : 'var(--color-fg)')
-        .style('font-size', 'var(--cds-font-size-caption)').text(r.posicao + '. ' + r.ticker);
+        .style('font-size', 'var(--cds-font-size-caption)').text(PB.rot(r));
     });
     box.replaceChildren(svg.node(), ...box.querySelectorAll('.pb-tip'));
   };
@@ -688,7 +705,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
   const COLS = [...table.querySelectorAll('th')].map((th) => th.dataset.field);
   const TEXT = new Set(['ticker', 'nome', 'segmento', 'confianca']);
   const fmt = {
-    posicao: (v) => String(v), score: (v) => PB.num(v, 1), p1: (v) => PB.num(v, 0), p2: (v) => PB.num(v, 0), p3: (v) => PB.num(v, 0), p4: (v) => PB.num(v, 0),
+    posicao: (v) => v === null || v === undefined ? '+' : String(v), score: (v) => PB.num(v, 1), p1: (v) => PB.num(v, 0), p2: (v) => PB.num(v, 0), p3: (v) => PB.num(v, 0), p4: (v) => PB.num(v, 0),
     preco_atual: (v) => PB.num(v), var_estresse: (v) => PB.sig(v), var_1m: (v) => PB.sig(v), dy: (v) => PB.num(v), pvp: (v) => PB.num(v),
     ms: (v) => PB.sig(v, 1), valor_justo: (v) => v === 0 ? 'n/a (ROE ≤ g)' : PB.num(v), vol_ratio: (v) => PB.num(v, 1) + 'x'
   };
@@ -833,7 +850,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
   const draw = () => {
     const box = document.getElementById('multiples');
     if (!PB.visible(box) || !PB.state(box, 'precos', 'ativos', 'parametros')) return;
-    const precos = dash.data('precos').data, ativos = [...dash.data('ativos').data].sort((a, b) => a.posicao - b.posicao);
+    const precos = dash.data('precos').data, ativos = [...dash.data('ativos').data].sort(PB.byPos);
     const par = dash.data('parametros').data[0];
     const byT = d3.group(precos, (p) => p.ticker);
     const ibov = (byT.get('IBOV') || []).map((p) => ({ d: new Date(p.data), v: p.base100 }));
@@ -845,7 +862,7 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
       const card = document.createElement('div'); card.style.minWidth = '0';
       const h = document.createElement('div'); h.className = 'pb-label';
       const last = a.var_1m;
-      h.textContent = a.posicao + '. ' + a.ticker + ' · ' + PB.sig(last, 1) + '% em 1 mês';
+      h.textContent = PB.rot(a) + ' · ' + PB.sig(last, 1) + '% em 1 mês';
       const c = document.createElement('div'); c.className = 'pb-chart'; c.style.height = '110px';
       card.append(h, c);
       return card;
@@ -892,8 +909,8 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
     const d = dash.data('ativos');
     const resumo = document.getElementById('ativo-resumo'), ind = document.getElementById('ativo-indicadores');
     if (d.status !== 'ok') { resumo.replaceChildren(); ind.replaceChildren(); return; }
-    const rows = [...d.data].sort((a, b) => a.posicao - b.posicao);
-    if (sel.options.length !== rows.length) sel.replaceChildren(...rows.map((a) => new Option(a.posicao + '. ' + a.ticker + ' · ' + a.nome, a.ticker)));
+    const rows = [...d.data].sort(PB.byPos);
+    if (sel.options.length !== rows.length) sel.replaceChildren(...rows.map((a) => new Option(PB.rot(a) + ' · ' + a.nome, a.ticker)));
     if (!PB.selected) PB.selected = rows[0].ticker;
     sel.value = PB.selected;
     const a = rows.find((r) => r.ticker === PB.selected);
@@ -904,9 +921,9 @@ document.querySelectorAll('.pb-tab').forEach((b) => b.addEventListener('click', 
     h.append(sTk, ' · ');
     const sc = document.createElement('span'); sc.dataset.source = 'ativos'; sc.dataset.field = 'score'; sc.dataset.where = 'ticker=' + T; sc.textContent = PB.num(a.score, 1); h.append(sc);
     const sub = document.createElement('div'); sub.className = 'pb-label';
-    sub.textContent = a.nome + ' · ' + a.segmento + ' · ' + a.posicao + 'º de ' + rows.length + ' · ' + a.status + ' · dados ' + PB.num(a.cobertura, 0) + '%';
+    sub.textContent = a.nome + ' · ' + a.segmento + ' · ' + (a.posicao ? a.posicao + 'º de ' + rows.filter((x) => x.posicao).length : 'fora do ranking (adicionado)') + ' · ' + a.status + ' · dados ' + PB.num(a.cobertura, 0) + '%';
     const chip = document.createElement('span'); chip.className = 'pb-chip';
-    const dot = document.createElement('i'); dot.style.background = PB.sinalColor(a.sinal); chip.append(dot, PB.sinalName(a.sinal) + ' · confiança ' + a.confianca.toLowerCase());
+    const dot = document.createElement('i'); dot.style.background = PB.sinalColor(a.sinal); chip.append(dot, PB.sinalName(a.sinal) + ' · confiança ' + String(a.confianca || '').toLowerCase());
     const mkP = (field, text, cls) => { const p = document.createElement('p'); p.className = cls; p.dataset.source = 'ativos'; p.dataset.field = field; p.dataset.where = 'ticker=' + T; p.textContent = text; return p; };
     resumo.replaceChildren(h, sub, chip, mkP('tese', a.tese, 'pb-text'), mkP('risco', 'Risco: ' + a.risco, 'pb-note'), mkP('nota', a.nota, 'pb-note'));
 

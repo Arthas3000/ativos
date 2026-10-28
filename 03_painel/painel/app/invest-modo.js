@@ -209,11 +209,12 @@
     'qualidade-sem-margem': ['Boa, mas sem desconto', 'Empresa sólida; o preço já reflete isso. Aguardar.'],
     'neutro': ['Neutro: acompanhar', 'Sem desconto nem alerta claros.'],
     'risco-rendimento': ['Atenção ao rendimento', 'O rendimento pode não se sustentar.'],
-    'armadilha': ['Evitar (armadilha)', 'Parece barato, mas os fundamentos pioram.']
+    'armadilha': ['Evitar (armadilha)', 'Parece barato, mas os fundamentos pioram.'],
+    'adicionado': ['Sem classificação (nota automática)', 'Adicionado por você: nota do mesmo modelo, sem análise qualitativa.']
   };
   // cor da indicação: significado fixo (verde = candidata, âmbar = cautela, azul = boa sem desconto, laranja = rendimento, vermelho = evitar)
   var TOM = { 'oportunidade': 'var(--color-ok)', 'oportunidade-com-risco': 'var(--color-warn)', 'qualidade-sem-margem': 'var(--accent-ink)',
-    'neutro': 'var(--color-fg-muted)', 'risco-rendimento': 'var(--orange)', 'armadilha': 'var(--color-bad)' };
+    'neutro': 'var(--color-fg-muted)', 'adicionado': 'var(--color-fg-muted)', 'risco-rendimento': 'var(--orange)', 'armadilha': 'var(--color-bad)' };
   var corInd = function (sinal) { return TOM[sinal] || PB.sinalColor(sinal); };
   var indicacao = function (sinal) { return (INDICACAO[sinal] || [PB.sinalName(sinal), ''])[0]; };
   var CANDIDATAS = ['oportunidade', 'oportunidade-com-risco'];
@@ -261,7 +262,7 @@
         'Versão ' + p.versao + ' · preços de ' + dt(p.data_ref) + ' · ' + p.evento + '.'));
 
     // tabela principal: nota, indicação e o risco de cada ativo, ordenados pela nota
-    var filtrados = A.slice().sort(function (a, b) { return a.posicao - b.posicao; }).filter(function (a) {
+    var filtrados = A.slice().sort(PB.byPos).filter(function (a) {
       return (!filtroFacil.classe || a.classe === filtroFacil.classe) && (!filtroFacil.soCompra || CANDIDATAS.indexOf(a.sinal) >= 0);
     });
     var chips = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Filtrar a tabela' });
@@ -278,13 +279,13 @@
           h('button', { type: 'button', class: 'inv-link', onclick: function () { PB.openAtivo(a.ticker); }, 'aria-label': 'Abrir ficha de ' + a.ticker }, a.ticker), ' ', h('span', { class: 'm' }, a.nome),
           h('div', { class: 'inv-ind-sm' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt }, indicacao(a.sinal))),
           h('div', { class: 'm' }, 'Risco: ' + (a.risco || '—'))),
-        h('td', null, h('b', null, num(a.score / 100, 1)), h('span', { class: 'pb-bar', style: 'width:' + (a.score / 1000 * 3) + 'rem;background:' + cor, 'aria-hidden': 'true' })),
+        h('td', null, h('b', null, num(a.score / 100, 1), a.posicao ? '' : '*'), h('span', { class: 'pb-bar', style: 'width:' + (a.score / 1000 * 3) + 'rem;background:' + cor, 'aria-hidden': 'true' })),
         h('td', { class: 'l pb-hide-sm' }, h('span', { class: 'inv-chip nd', style: 'color:' + corTxt, title: (INDICACAO[a.sinal] || [])[1] || '' }, indicacao(a.sinal))),
         h('td', { class: 'pb-hide-sm' }, 'R$ ' + num(a.preco_atual, 2)));
     });
     var cTab = h('div', { class: 'pb-card' },
       h('h2', null, 'Notas e indicação'),
-      h('p', { class: 'pb-note' }, 'Nota de 0 a 10 (o score de 0 a 1000 dividido por 100). Do mais bem avaliado para o menos. Toque no código para ver a ficha.'),
+      h('p', { class: 'pb-note' }, 'Nota de 0 a 10 (o score de 0 a 1000 dividido por 100). Os 20 do ranking vêm do mais bem avaliado para o menos; os ativos adicionados por você (*) vêm depois, com nota automática. Toque no código para ver a ficha.'),
       chips,
       h('p', { class: 'pb-note', role: 'status', 'aria-live': 'polite' }, filtrados.length + ' de ' + A.length + ' ativos'),
       filtrados.length ? h('div', { class: 'pb-tablewrap' }, h('table', { class: 'pb-table inv-ez' }, h('caption', { class: 'inv-sr' }, 'Notas e indicação dos ativos'),
@@ -549,6 +550,8 @@
       var corpo = h('tbody');
       var tabela = h('div', { class: 'pb-tablewrap', style: 'max-height:none' }, h('table', { class: 'pb-table' }, h('caption', { class: 'inv-sr' }, 'Catálogo de ativos em triagem'),
         h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'l' }, 'Ativo'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Segmento'), h('th', { scope: 'col', class: 'l' }, 'Situação'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Leitura preliminar'))), corpo));
+      var adicionadosAgora = {};
+      try { dash.data('ativos').data.forEach(function (a) { if (a.sinal === 'adicionado') adicionadosAgora[a.ticker] = 1; }); } catch (e) { /* ok */ }
       function redesenharLista() {
         var q2 = norm(F.q);
         var l = cat.filter(function (x) {
@@ -572,7 +575,7 @@
           var tr = h('tr', null,
             h('td', { class: 'l' }, b, ' ', h('span', { class: 'pb-note' }, x.nome), h('div', { class: 'pb-note' }, x.classe)),
             h('td', { class: 'l pb-hide-sm' }, x.segmento || '—'),
-            h('td', { class: 'l' }, h('span', { class: 'inv-chip nd', style: 'color:' + (x.status === 'preliminar' ? 'var(--color-warn)' : 'var(--color-fg-muted)') }, x.status === 'preliminar' ? 'Leitura preliminar' : 'Só cadastro')),
+            h('td', { class: 'l' }, adicionadosAgora[x.ticker] ? h('span', { class: 'inv-chip nd', style: 'color:var(--accent-ink)' }, 'Adicionado: veja no ranking') : h('span', { class: 'inv-chip nd', style: 'color:' + (x.status === 'preliminar' ? 'var(--color-warn)' : 'var(--color-fg-muted)') }, x.status === 'preliminar' ? 'Leitura preliminar' : 'Só cadastro')),
             h('td', { class: 'l pb-hide-sm' }, x.status === 'preliminar' ? PB.sinalName(x.sinal) : '—'));
           return [tr, det];
         })));
@@ -607,7 +610,7 @@
     var pend = function () { var u = lerPref(); return u.pendentes && typeof u.pendentes === 'object' ? u.pendentes : {}; };
     function validar(texto) {
       var partes = String(texto || '').split(/[\s,;]+/).filter(Boolean), ok = [], erros = [];
-      var ranking = {}; try { dash.data('ativos').data.forEach(function (a) { ranking[a.ticker] = 1; }); } catch (e) { /* ok */ }
+      var ranking = {}; try { dash.data('ativos').data.forEach(function (a) { if (a.sinal !== 'adicionado') ranking[a.ticker] = 1; }); } catch (e) { /* ok */ }
       var jaTem = {}; ((dados && dados.fichas) || []).forEach(function (f) { jaTem[f.ticker] = 1; });
       partes.forEach(function (p) {
         var v = C.validarTicker(p);
