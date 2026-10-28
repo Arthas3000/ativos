@@ -37,7 +37,10 @@ jobs:
       PEDIDO: ${{ github.event.inputs.tickers || github.event.issue.title }}
       ACAO: ${{ github.event.inputs.acao || 'adicionar' }}
     steps:
+      # sempre o main mais recente: execuções enfileiradas atrás de outra usariam o commit antigo do pedido e o push seria rejeitado
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -54,13 +57,13 @@ jobs:
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --quiet || git commit -m "Ativos adicionados: $(echo "$PEDIDO" | tr -cd 'A-Za-z0-9 ,:')"
-          git push
+          git push || { git pull --rebase -X theirs origin ${{ github.event.repository.default_branch }} && git push; }
       - name: Avisar na issue
         if: always() && github.event_name == 'issues'
         env:
           GH_TOKEN: ${{ github.token }}
           RESULTADO: ${{ job.status }}
         run: |
-          if [ "$RESULTADO" = "success" ]; then MSG="Pronto. O ativo foi adicionado: em alguns minutos o GitHub Pages publica a nota, os preços e os gráficos. Recarregue o app."; else MSG="Não deu certo. Veja o log da execução em Actions. Causas comuns: código inexistente, limite de 30 ativos ou fonte de dados fora do ar."; fi
+          if [ "$RESULTADO" = "success" ]; then MSG="Pronto. O ativo foi adicionado: em alguns minutos o GitHub Pages publica a nota, os preços e os gráficos. Recarregue o app."; else MSG="Não deu certo. Veja o log da execução em Actions. Causas comuns: código inexistente, limite de 100 ativos ou fonte de dados fora do ar."; fi
           gh issue comment "${{ github.event.issue.number }}" --body "$MSG"
           gh issue close "${{ github.event.issue.number }}"

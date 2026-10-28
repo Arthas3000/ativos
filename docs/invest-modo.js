@@ -620,7 +620,7 @@
         if (ok.indexOf(v.ticker) < 0) ok.push(v.ticker);
       });
       if (!partes.length) erros.push('Digite o código do ativo (ex.: PRIO3).');
-      if (ok.length + Object.keys(jaTem).length > 30) erros.push('O limite é de 30 ativos adicionados.');
+      if (ok.length + Object.keys(jaTem).length > 100) erros.push('O limite é de 100 ativos adicionados.');
       return { ok: ok, erros: erros };
     }
     function pedir(lista) {
@@ -703,7 +703,7 @@
         pendentes.length ? h('div', null, h('p', { class: 'pb-note' }, 'Aguardando a atualização (pode levar alguns minutos; depois recarregue): '),
           h('div', { class: 'pb-chips' }, pendentes.map(function (t) { return h('span', { class: 'pb-chip' }, t + ' · pedido em ' + dt(pend()[t])); })),
           h('button', { type: 'button', class: 'pb-btn', onclick: function () { carregar(true); } }, 'Verificar agora')) : null,
-        h('p', { class: 'pb-note' }, 'Para remover ou adicionar vários de uma vez: GitHub › Actions › "Adicionar ativo" › Run workflow. Limite de 30 ativos adicionados.'));
+        h('p', { class: 'pb-note' }, 'Para remover ou adicionar vários de uma vez: GitHub › Actions › "Adicionar ativo" › Run workflow. Limite de 100 ativos adicionados.'));
       var cLista;
       if (erro) cLista = h('div', { class: 'pb-card' }, h('p', { class: 'pb-note warn' }, 'Não foi possível carregar os ativos adicionados (' + erro + ').'));
       else if (!fichas.length) cLista = h('div', { class: 'pb-card' }, h('h2', null, 'Ativos adicionados'), h('p', { class: 'pb-note' }, 'Nenhum ativo adicionado ainda.'));
