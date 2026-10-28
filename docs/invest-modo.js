@@ -15,7 +15,7 @@
   var ROTULO = { facil: 'Fácil', avancado: 'Avançado' };
   var DICA = { facil: 'Fácil: o essencial, em 2 a 5 minutos', avancado: 'Avançado: análise detalhada, em 15 a 20 minutos' };
   // abas do Mercado que só existem no Avançado (o Fácil as resume na tela Resumo) e a aba que só existe no Fácil
-  var TABS_AV = ['geral', 'ranking', 'valor', 'precos', 'macro', 'historico', 'metodo'];
+  var TABS_AV = ['geral', 'ranking', 'valor', 'precos', 'catalogo', 'macro', 'historico', 'metodo'];
   var TABS_FACIL = ['resumo'];
   // seções escondidas no Fácil: nada some dos dados, só da navegação
   var SECOES_AV = { corretora: ['ativos'], config: ['custos', 'extras', 'fontes'] };
@@ -493,6 +493,94 @@
     }
     new MutationObserver(aplicar).observe(tb, { childList: true });
     PB.draws.push(aplicar);
+  })();
+
+  /* ---------- Catálogo de triagem (Avançado): ativos fora do ranking, sem score; dados de dados/catalogo.json ---------- */
+  (function () {
+    var pg = h('section', { class: 'pb-page', id: 'catalogo', 'data-page': 'catalogo', hidden: true });
+    var ref = raiz.querySelector('[data-page="macro"]');
+    raiz.insertBefore(pg, ref || null);
+    var bt = h('button', { class: 'pb-tab', role: 'tab', 'data-tab': 'catalogo', 'aria-selected': 'false' }, 'Catálogo');
+    bt.addEventListener('click', function () { PB.show('catalogo'); });
+    var tabMacro = nav.querySelector('[data-tab="macro"]');
+    nav.insertBefore(bt, tabMacro || null);
+    var ab = NAV.grupos[0].abas; ab.splice(ab.indexOf('macro') < 0 ? ab.length : ab.indexOf('macro'), 0, 'catalogo');
+
+    var cat = null, erro = null, carregando = false;
+    var F = { q: '', classe: '', status: '', seg: '' }, abertos = {};
+    function carregar() {
+      if (cat || carregando) return; carregando = true;
+      fetch((W.PB_BASE || '') + 'dados/catalogo.json', { cache: 'no-cache' })
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (d) { cat = d; }).catch(function (e) { erro = String(e); })
+        .then(function () { carregando = false; desenhar(); });
+    }
+    var norm = function (t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); };
+    function desenhar() {
+      if (PB.current !== 'catalogo') return;
+      if (erro) { pg.replaceChildren(h('div', { class: 'pb-card' }, h('p', { class: 'pb-note' }, 'Não foi possível carregar o catálogo (' + erro + '). Ele é gerado junto com os dados do app; tente de novo depois de "Atualizar dados".'))); return; }
+      if (!cat) { pg.replaceChildren(h('div', { class: 'pb-card', 'aria-live': 'polite' }, h('p', { class: 'pb-note' }, 'Carregando o catálogo…'))); carregar(); return; }
+      var segs = Array.from(new Set(cat.map(function (x) { return x.segmento; }).filter(Boolean))).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
+      var q = norm(F.q);
+      var lista = cat.filter(function (x) {
+        return (!F.classe || x.classe === F.classe) && (!F.status || x.status === F.status) && (!F.seg || x.segmento === F.seg) &&
+          (!q || norm(x.ticker + ' ' + x.nome + ' ' + x.segmento).indexOf(q) >= 0);
+      });
+      var nPre = cat.filter(function (x) { return x.status === 'preliminar'; }).length;
+      var aviso = h('div', { class: 'pb-card' },
+        h('h2', null, 'Catálogo de triagem'),
+        h('p', { class: 'pb-text' }, cat.length + ' ativos da B3 além dos 20 do ranking. ' + nPre + ' têm uma leitura preliminar; os outros ' + (cat.length - nPre) + ' são só cadastro.'),
+        h('p', { class: 'pb-note warn' }, 'Atenção: estes ativos não têm score, valor justo nem dados verificados neste app. A leitura preliminar não foi validada com balanço, cotação e liquidez e não é recomendação. Use apenas para saber quais ativos existem e por onde começar a pesquisar.'));
+      var busca = h('input', { type: 'search', class: 'pb-in', id: 'cat-busca', placeholder: 'Buscar código, nome ou segmento', 'aria-label': 'Buscar no catálogo', value: F.q });
+      busca.addEventListener('input', function () { F.q = busca.value; pos = busca.selectionStart; redesenharLista(); });
+      var pos = 0;
+      var chips = h('div', { class: 'pb-controls', role: 'group', 'aria-label': 'Filtrar por tipo' });
+      [['', 'Todos'], ['Ação', 'Ações'], ['FII', 'FIIs']].forEach(function (c) {
+        chips.append(h('button', { type: 'button', class: 'pb-btn', 'aria-pressed': String(F.classe === c[0]), onclick: function () { F.classe = c[0]; desenhar(); } }, c[1]));
+      });
+      var selSt = h('select', { class: 'pb-in', 'aria-label': 'Filtrar por situação', onchange: function (e) { F.status = e.target.value; desenhar(); } },
+        h('option', { value: '' }, 'Todas as situações'), h('option', { value: 'preliminar' }, 'Com leitura preliminar'), h('option', { value: 'sem-analise' }, 'Só cadastro'));
+      selSt.value = F.status;
+      var selSeg = h('select', { class: 'pb-in', 'aria-label': 'Filtrar por segmento', onchange: function (e) { F.seg = e.target.value; desenhar(); } },
+        h('option', { value: '' }, 'Todos os segmentos'), segs.map(function (g) { return h('option', { value: g }, g); }));
+      selSeg.value = F.seg;
+      var limpar = h('button', { type: 'button', class: 'pb-btn', onclick: function () { F = { q: '', classe: '', status: '', seg: '' }; desenhar(); } }, 'Limpar filtros');
+      var cont = h('span', { class: 'pb-note', id: 'cat-cont', role: 'status', 'aria-live': 'polite' });
+      var corpo = h('tbody');
+      var tabela = h('div', { class: 'pb-tablewrap', style: 'max-height:none' }, h('table', { class: 'pb-table' }, h('caption', { class: 'inv-sr' }, 'Catálogo de ativos em triagem'),
+        h('thead', null, h('tr', null, h('th', { scope: 'col', class: 'l' }, 'Ativo'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Segmento'), h('th', { scope: 'col', class: 'l' }, 'Situação'), h('th', { scope: 'col', class: 'l pb-hide-sm' }, 'Leitura preliminar'))), corpo));
+      function redesenharLista() {
+        var q2 = norm(F.q);
+        var l = cat.filter(function (x) {
+          return (!F.classe || x.classe === F.classe) && (!F.status || x.status === F.status) && (!F.seg || x.segmento === F.seg) &&
+            (!q2 || norm(x.ticker + ' ' + x.nome + ' ' + x.segmento).indexOf(q2) >= 0);
+        });
+        cont.textContent = l.length + ' de ' + cat.length + ' ativos' + (l.length === 0 ? ' — nenhum com esse filtro' : '');
+        corpo.replaceChildren.apply(corpo, [].concat.apply([], l.map(function (x) {
+          var aberto = !!abertos[x.ticker];
+          var b = h('button', { type: 'button', class: 'inv-link', 'aria-expanded': String(aberto), 'aria-controls': 'cat-d-' + x.ticker }, x.ticker);
+          var det = h('tr', { id: 'cat-d-' + x.ticker, hidden: !aberto },
+            h('td', { class: 'l', colspan: '4', style: 'white-space:normal' },
+              x.status === 'preliminar'
+                ? h('div', { class: 'inv-risco' },
+                    h('p', { class: 'pb-text' }, h('b', null, 'Tese preliminar: '), x.tese || '—'),
+                    h('p', { class: 'pb-text' }, h('b', null, 'Risco apontado: '), x.risco || '—'),
+                    x.nota ? h('p', { class: 'pb-note' }, x.nota) : null,
+                    h('p', { class: 'pb-note warn' }, 'Leitura preliminar, não validada (confiança ' + String(x.confianca || 'baixa').toLowerCase() + '). Sem score e sem valor justo neste app.'))
+                : h('p', { class: 'pb-note' }, 'Só cadastro: sem tese nem dados verificados. Pesquise cotação, liquidez, dívida, resultados e governança em fontes atuais antes de qualquer decisão.')));
+          b.addEventListener('click', function () { abertos[x.ticker] = !abertos[x.ticker]; det.hidden = !abertos[x.ticker]; b.setAttribute('aria-expanded', String(!!abertos[x.ticker])); });
+          var tr = h('tr', null,
+            h('td', { class: 'l' }, b, ' ', h('span', { class: 'pb-note' }, x.nome), h('div', { class: 'pb-note' }, x.classe)),
+            h('td', { class: 'l pb-hide-sm' }, x.segmento || '—'),
+            h('td', { class: 'l' }, h('span', { class: 'inv-chip nd', style: 'color:' + (x.status === 'preliminar' ? 'var(--color-warn)' : 'var(--color-fg-muted)') }, x.status === 'preliminar' ? 'Leitura preliminar' : 'Só cadastro')),
+            h('td', { class: 'l pb-hide-sm' }, x.status === 'preliminar' ? PB.sinalName(x.sinal) : '—'));
+          return [tr, det];
+        })));
+      }
+      pg.replaceChildren(aviso, h('div', { class: 'pb-card' }, h('div', { class: 'pb-controls' }, busca, chips, selSt, selSeg, limpar, cont), tabela));
+      redesenharLista();
+    }
+    INV.aoMostrar('catalogo', desenhar);
   })();
 
   /* ---------- interface pública ---------- */

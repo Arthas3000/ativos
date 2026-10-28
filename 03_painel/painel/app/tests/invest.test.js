@@ -658,6 +658,10 @@ test('twr exportada (fração)', () => {
 test('validarTicker', () => {
   assert.deepEqual(C.validarTicker('PETR4'), { ok: true, ticker: 'PETR4', erro: null, aviso: null });
   assert.equal(C.validarTicker('petr4').ticker, 'PETR4');
+  assert.equal(C.validarTicker('b3sa3').ok, true);                 // dígito no meio é válido (B3SA3)
+  assert.equal(C.validarTicker('B3SA3').ticker, 'B3SA3');
+  assert.equal(C.validarTicker('BBFI11B').ok, true);               // cota classe B de FII
+  assert.equal(C.validarTicker('3ABC4').ok, false);               // começa com letra
   assert.equal(C.validarTicker(' petr4 ').ticker, 'PETR4');
   const f = C.validarTicker('PETR4F');
   assert.equal(f.ok, true); assert.equal(f.ticker, 'PETR4'); assert.match(f.aviso, /fracionário/);

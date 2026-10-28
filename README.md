@@ -29,6 +29,7 @@ Repositório de consulta (humano ou IA) para alocação de ativos no mercado bra
 | `03_painel/` | **Painel de Oportunidades B3**: [link](https://claude.ai/artifact/CDQrUB1RafE6HBQBGwfMaj). |
 | `03_painel/atualizar.py` | Atualização: `nova-versao`, `precos`, `fundamentus`, `historico`, `build`, `site`, `snapshot`, `teste`. |
 | `03_painel/config.json` | Versão atual, datas de referência, evento de estresse, snapshot macro em uso e link do painel. |
+| `03_painel/catalogo_bruto.csv` | Catálogo de triagem: 279 ativos além dos 20 do ranking (cadastro e leituras preliminares, **sem score e não validados**). `atualizar.py catalogo` limpa o CSV (descarta o texto padrão de triagem nas células mescladas `a \| b`) e gera `dados/catalogo.json`; o `build` também chama. Aparece no app em Mercado › Catálogo (modo Avançado). |
 | `03_painel/notas_ativos.csv` | Camada qualitativa (tese, risco, sinal, confiança) e campos `travar` (dado oficial que o Fundamentus não sobrescreve). |
 | `03_painel/painel/index.html` | Código da página do painel. |
 | `03_painel/dados/` | JSONs que o painel lê (gerados pelo `build`). |
